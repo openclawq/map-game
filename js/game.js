@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.8";
+  const APP_VERSION = "v2026.02.20.9";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -153,6 +153,9 @@
     reviewMapContext: null,
     activeGeoJson: null,
     downPoint: null,
+    downTransform: null,
+    touchPointers: new Set(),
+    touchGestureDetected: false,
     autoNextTimer: null,
     viewScaleIndex: 0,
     records: {},
@@ -969,14 +972,60 @@
 
     state.viewScaleIndex = 0;
     syncMapScaleButton();
+    state.touchPointers.clear();
+    state.touchGestureDetected = false;
+    state.downTransform = null;
+    state.downPoint = null;
 
     state.mapContext.svg
       .on("pointerdown.answer", onMapPointerDown)
-      .on("pointerup.answer", onMapPointerUp);
+      .on("pointerup.answer", onMapPointerUp)
+      .on("pointercancel.answer", onMapPointerCancel);
   }
 
   function onMapPointerDown(event) {
     state.downPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
+    state.downTransform = captureMapTransform();
+
+    if (event && event.pointerType === "touch" && Number.isFinite(event.pointerId)) {
+      state.touchPointers.add(event.pointerId);
+      if (state.touchPointers.size > 1) {
+        state.touchGestureDetected = true;
+      }
+    }
+  }
+
+  function onMapPointerCancel(event) {
+    if (event && event.pointerType === "touch" && Number.isFinite(event.pointerId)) {
+      state.touchPointers.delete(event.pointerId);
+      if (!state.touchPointers.size) {
+        state.touchGestureDetected = false;
+      }
+    }
+    state.downPoint = null;
+    state.downTransform = null;
+  }
+
+  function captureMapTransform() {
+    const transform =
+      state.mapContext && typeof state.mapContext.getTransform === "function"
+        ? state.mapContext.getTransform()
+        : null;
+    return {
+      x: Number(transform && transform.x) || 0,
+      y: Number(transform && transform.y) || 0,
+      k: Number(transform && transform.k) || 1,
+    };
+  }
+
+  function hasMapTransformChanged(prev, next) {
+    if (!prev || !next) {
+      return false;
+    }
+    const dx = Math.abs(Number(next.x || 0) - Number(prev.x || 0));
+    const dy = Math.abs(Number(next.y || 0) - Number(prev.y || 0));
+    const dk = Math.abs(Number(next.k || 1) - Number(prev.k || 1));
+    return dx > 2 || dy > 2 || dk > 0.002;
   }
 
   function onMapPointerUp(event) {
@@ -986,7 +1035,30 @@
 
     const upPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
     const downPoint = state.downPoint || upPoint;
+    const downTransform = state.downTransform;
     state.downPoint = null;
+    state.downTransform = null;
+
+    const currentTransform = captureMapTransform();
+    const transformChanged = hasMapTransformChanged(downTransform, currentTransform);
+
+    let touchGesture = state.touchGestureDetected;
+    if (event && event.pointerType === "touch" && Number.isFinite(event.pointerId)) {
+      touchGesture = touchGesture || state.touchPointers.size > 1;
+      state.touchPointers.delete(event.pointerId);
+      if (!state.touchPointers.size) {
+        state.touchGestureDetected = false;
+      }
+    }
+
+    if (touchGesture || transformChanged) {
+      addDevLog("gesture_skip", {
+        pointerType: event && event.pointerType,
+        touchGesture,
+        transformChanged,
+      });
+      return;
+    }
 
     const moved = Math.hypot(upPoint.x - downPoint.x, upPoint.y - downPoint.y);
     if (moved > 8) {
@@ -1003,6 +1075,11 @@
 
     if (modeType === "province") {
       const feature = getFeatureFromEvent(event);
+      if (!feature) {
+        setFeedback("请点击地图轮廓内区域。", "warn");
+        addDevLog("province_click_invalid", { clickGeo: geo, clickScreen: upPoint });
+        return;
+      }
       handleProvinceAnswer({
         geo,
         feature,
@@ -1012,6 +1089,18 @@
       if (!geo) {
         setFeedback("请点击地图有效区域。", "warn");
         addDevLog("city_click_invalid", { screenPoint: upPoint });
+        return;
+      }
+
+      const activeFeatures =
+        state.activeGeoJson && Array.isArray(state.activeGeoJson.features)
+          ? state.activeGeoJson.features
+          : [];
+      const feature =
+        getFeatureFromEvent(event) || Utils.findFeatureByPoint(geo.lon, geo.lat, activeFeatures);
+      if (!feature) {
+        setFeedback("请点击地图轮廓内区域。", "warn");
+        addDevLog("city_click_outside_map", { clickGeo: geo, clickScreen: upPoint });
         return;
       }
       handleCityAnswer(geo);
@@ -1061,8 +1150,6 @@
       clickGeo: geo,
       clickScreen: screenPoint,
     });
-
-    highlightProvinceResult(target.name, clickedName, correct);
 
     if (correct) {
       setFeedback("回答正确。", "ok");
