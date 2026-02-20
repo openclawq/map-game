@@ -2,6 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
+  const APP_VERSION = "v2026.02.20.5";
   const TOTAL_QUESTIONS = 10;
 
   const MODE_CONFIG = {
@@ -65,6 +66,7 @@
 
   function init() {
     cacheElements();
+    renderVersion();
     bindEvents();
     initDevTools();
     setModeButtonsDisabled(true);
@@ -99,6 +101,9 @@
     els.historyList = document.getElementById("history-list");
     els.restartBtn = document.getElementById("restart-btn");
     els.homeBtn = document.getElementById("home-btn");
+    els.homeVersion = document.getElementById("home-version");
+    els.gameVersion = document.getElementById("game-version");
+    els.resultVersion = document.getElementById("result-version");
 
     els.devTools = document.getElementById("dev-tools");
     els.devLogOutput = document.getElementById("dev-log-output");
@@ -151,6 +156,19 @@
     const enabledByQuery = /(?:\?|&)devlog=1(?:&|$)/.test(window.location.search);
     const enabledByStorage = window.localStorage.getItem("map-game-devlog") === "1";
     setDevMode(enabledByQuery || enabledByStorage, false);
+  }
+
+  function renderVersion() {
+    const text = `版本：${APP_VERSION}`;
+    if (els.homeVersion) {
+      els.homeVersion.textContent = text;
+    }
+    if (els.gameVersion) {
+      els.gameVersion.textContent = text;
+    }
+    if (els.resultVersion) {
+      els.resultVersion.textContent = text;
+    }
   }
 
   function setDevMode(flag, persist) {

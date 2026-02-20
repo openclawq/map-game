@@ -70,6 +70,15 @@ body {
   font-size: clamp(0.95rem, 2vw, 1.15rem);
 }
 
+.version-text {
+  margin: -10px 0 14px;
+  text-align: center;
+  color: #7f4f2a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
 .card {
   background: rgba(255, 248, 230, 0.72);
   border: 2px solid var(--c-border);

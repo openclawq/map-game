@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>地理知识问答 - 三国风</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260220-5" />
 </head>
 <body>
   <div class="bg-pattern" aria-hidden="true"></div>
@@ -13,6 +13,7 @@
     <section id="home-page" class="page">
       <h1 class="title">地理知识问答</h1>
       <p class="subtitle">运筹帷幄，决胜千里</p>
+      <p id="home-version" class="version-text">版本：-</p>
 
       <div id="mode-selection" class="card mode-grid">
         <button data-mode="province-click">省份大挑战</button>
@@ -55,6 +56,7 @@
         <button id="next-btn" disabled>下一题</button>
         <button id="quit-btn" class="secondary">返回首页</button>
       </div>
+      <p id="game-version" class="version-text">版本：-</p>
     </section>
 
     <section id="result-page" class="page hidden">
@@ -66,11 +68,12 @@
         <button id="restart-btn">再来一局</button>
         <button id="home-btn" class="secondary">返回首页</button>
       </div>
+      <p id="result-version" class="version-text">版本：-</p>
     </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/utils.js?v=20260220-5"></script>
+  <script src="js/game.js?v=20260220-5"></script>
 </body>
 </html>
