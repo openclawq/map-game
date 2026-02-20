@@ -95,6 +95,31 @@ body {
   width: min(760px, 92vw);
 }
 
+.difficulty-box {
+  width: min(760px, 92vw);
+  margin: 10px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.difficulty-box label {
+  font-weight: 700;
+  color: #6f3a14;
+}
+
+.difficulty-box select {
+  min-width: 220px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 2px solid var(--c-border);
+  border-radius: 8px;
+  background: #fff4dc;
+  color: #5f2f12;
+  font-weight: 700;
+}
+
 button {
   border: 2px solid var(--c-border);
   border-radius: 10px;
@@ -238,6 +263,10 @@ button.secondary {
   fill: rgba(245, 183, 74, 0.9);
 }
 
+.map-feature-hard:hover {
+  fill: rgba(118, 64, 29, 0.62) !important;
+}
+
 .feature-target {
   fill: rgba(255, 215, 0, 0.55);
 }
@@ -362,6 +391,16 @@ button.secondary {
 
   .mode-grid {
     grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .difficulty-box {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .difficulty-box select {
     width: 100%;
   }
 

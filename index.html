@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>地理知识问答 - 三国风</title>
-  <link rel="stylesheet" href="css/style.css?v=20260220-5" />
+  <link rel="stylesheet" href="css/style.css?v=20260220-6" />
 </head>
 <body>
   <div class="bg-pattern" aria-hidden="true"></div>
@@ -20,6 +20,14 @@
         <button data-mode="city-click">省会定位</button>
         <button data-mode="world-province">世界国家挑战</button>
         <button data-mode="world-city">世界城市定位</button>
+      </div>
+
+      <div class="card difficulty-box">
+        <label for="province-difficulty">省份挑战难度</label>
+        <select id="province-difficulty" aria-label="省份挑战难度选择">
+          <option value="easy">简单（悬停提示）</option>
+          <option value="hard">困难（关闭悬停提示）</option>
+        </select>
       </div>
 
       <p id="loading-text" class="muted">正在加载地图与题库数据...</p>
@@ -73,7 +81,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="js/utils.js?v=20260220-5"></script>
-  <script src="js/game.js?v=20260220-5"></script>
+  <script src="js/utils.js?v=20260220-6"></script>
+  <script src="js/game.js?v=20260220-6"></script>
 </body>
 </html>

@@ -2,8 +2,10 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.5";
+  const APP_VERSION = "v2026.02.20.6";
   const TOTAL_QUESTIONS = 10;
+  const AUTO_NEXT_DELAY_MS = 2000;
+  const WORLD_COUNTRY_MIN_AREA = 0.0004;
 
   const MODE_CONFIG = {
     "province-click": {
@@ -41,6 +43,9 @@
     awaitingAnswer: false,
 
     dataReady: false,
+    settings: {
+      provinceDifficulty: "easy",
+    },
     data: {
       chinaProvinces: null,
       chinaCities: [],
@@ -67,6 +72,7 @@
   function init() {
     cacheElements();
     renderVersion();
+    initSettings();
     bindEvents();
     initDevTools();
     setModeButtonsDisabled(true);
@@ -81,6 +87,7 @@
     els.modeButtons = Array.from(
       document.querySelectorAll('#mode-selection button[data-mode]')
     );
+    els.provinceDifficulty = document.getElementById("province-difficulty");
 
     els.loadingText = document.getElementById("loading-text");
     els.errorText = document.getElementById("error-text");
@@ -133,6 +140,14 @@
       }
     });
 
+    if (els.provinceDifficulty) {
+      els.provinceDifficulty.addEventListener("change", () => {
+        const value = els.provinceDifficulty.value === "hard" ? "hard" : "easy";
+        state.settings.provinceDifficulty = value;
+        window.localStorage.setItem("map-game-province-difficulty", value);
+      });
+    }
+
     if (els.devCopyBtn) {
       els.devCopyBtn.addEventListener("click", copyDevLogs);
     }
@@ -168,6 +183,14 @@
     }
     if (els.resultVersion) {
       els.resultVersion.textContent = text;
+    }
+  }
+
+  function initSettings() {
+    const cached = window.localStorage.getItem("map-game-province-difficulty");
+    state.settings.provinceDifficulty = cached === "hard" ? "hard" : "easy";
+    if (els.provinceDifficulty) {
+      els.provinceDifficulty.value = state.settings.provinceDifficulty;
     }
   }
 
@@ -251,7 +274,9 @@
         ]);
 
       state.data.chinaProvinces = normalizeGeoJsonOrientation(chinaProvinces);
-      state.data.worldCountries = normalizeGeoJsonOrientation(worldCountries);
+      state.data.worldCountries = sanitizeWorldCountries(
+        normalizeGeoJsonOrientation(worldCountries)
+      );
       state.data.chinaCities = sanitizeChinaCities(chinaCities || []);
       state.data.worldCities = sanitizeWorldCities(worldCities || []);
       state.dataReady = true;
@@ -279,6 +304,44 @@
         province: item.province || "",
         country: "China",
       }));
+  }
+
+  function sanitizeWorldCountries(geojson) {
+    if (!geojson || !Array.isArray(geojson.features)) {
+      return geojson;
+    }
+
+    const features = geojson.features.filter((feature) => {
+      const normName = normalizeCountryName(Utils.getFeatureName(feature));
+      if (!normName || isTaiwanName(normName)) {
+        return false;
+      }
+      let area = 0;
+      try {
+        area = d3.geoArea(feature);
+      } catch (err) {
+        return false;
+      }
+      return Number.isFinite(area) && area >= WORLD_COUNTRY_MIN_AREA;
+    });
+
+    return { ...geojson, features };
+  }
+
+  function normalizeCountryName(value) {
+    return String(value == null ? "" : value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "");
+  }
+
+  function isTaiwanName(normName) {
+    return (
+      normName === "taiwan" ||
+      normName === "taiwanprovinceofchina" ||
+      normName === "taiwan,provinceofchina" ||
+      normName === "taiwan*"
+    );
   }
 
   function normalizeGeoJsonOrientation(geojson) {
@@ -347,6 +410,7 @@
         province: item.province || "",
         country: item.country || "Unknown",
       }))
+      .filter((item) => !isTaiwanName(normalizeCountryName(item.country)))
       .filter((item) => item.type === "capital" || item.type === "major");
   }
 
@@ -417,6 +481,7 @@
       mode,
       title: MODE_CONFIG[mode].title,
       totalQuestions: state.totalQuestions,
+      provinceDifficulty: state.settings.provinceDifficulty,
     });
     renderGameMap();
     renderQuestion();
@@ -527,6 +592,13 @@
     const scope = MODE_CONFIG[state.mode].scope;
     const preset = getMapRenderPreset(scope, false);
     const chinaOutline = scope === "china" ? getChinaOutlineFeature() : null;
+    const featureClasses = [];
+    if (state.mode === "province-click") {
+      featureClasses.push("map-feature-no-border");
+      if (state.settings.provinceDifficulty === "hard") {
+        featureClasses.push("map-feature-hard");
+      }
+    }
     state.activeGeoJson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
@@ -538,7 +610,7 @@
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
       outlineFeature: chinaOutline || state.activeGeoJson,
-      featureClass: state.mode === "province-click" ? "map-feature-no-border" : "",
+      featureClass: featureClasses.join(" "),
       fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "game-map",
@@ -640,13 +712,13 @@
 
     if (correct) {
       setFeedback("回答正确。", "ok");
-      finalizeQuestion();
+      finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     } else if (clickedName) {
       setFeedback(`未命中，点击了：${clickedName}。正确答案：${target.name}。`, "error");
-      finalizeQuestion({ autoNextMs: 2000 });
+      finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     } else {
       setFeedback(`未命中有效行政区。正确答案：${target.name}。`, "error");
-      finalizeQuestion({ autoNextMs: 2000 });
+      finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     }
   }
 
@@ -720,13 +792,13 @@
 
     if (distance <= 300) {
       setFeedback(`误差：${Utils.formatDistance(distance)}`, "ok");
-      finalizeQuestion();
+      finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     } else {
       setFeedback(
         `误差：${Utils.formatDistance(distance)}。正确位置：${target.prompt}。`,
         "warn"
       );
-      finalizeQuestion({ autoNextMs: 2000 });
+      finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     }
   }
 
