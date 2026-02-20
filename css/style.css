@@ -174,7 +174,7 @@ button.secondary {
   margin: 0 auto 10px;
   border: 3px solid var(--c-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(250, 236, 209, 0.88) 0%, rgba(241, 216, 169, 0.92) 100%);
+  background: linear-gradient(180deg, rgba(244, 224, 185, 0.94) 0%, rgba(232, 194, 132, 0.96) 100%);
   overflow: hidden;
   touch-action: none;
 }
@@ -191,38 +191,42 @@ button.secondary {
 }
 
 .map-basemap {
-  fill: rgba(219, 159, 93, 0.22);
+  fill: rgba(120, 74, 41, 0.48);
   pointer-events: none;
 }
 
 .map-basemap.map-theme-world {
-  fill: rgba(190, 145, 94, 0.2);
+  fill: rgba(101, 67, 44, 0.46);
 }
 
 .map-outline {
   fill: none;
-  stroke: #643012;
-  stroke-width: 1.9;
-  opacity: 0.95;
+  stroke: #2b1408;
+  stroke-width: 2.2;
+  opacity: 0.98;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
 .map-outline.map-theme-world {
-  stroke-width: 1.25;
+  stroke-width: 1.45;
 }
 
 .map-feature {
-  fill: rgba(210, 105, 30, 0.24);
-  stroke: #6f3a14;
-  stroke-width: 0.8;
-  stroke-opacity: 0.75;
+  fill: rgba(118, 64, 29, 0.62);
+  stroke: rgba(60, 29, 10, 0.88);
+  stroke-width: 0.9;
+  stroke-opacity: 0.9;
   vector-effect: non-scaling-stroke;
   transition: fill 0.12s ease;
 }
 
+.map-feature-no-border {
+  stroke: none !important;
+}
+
 .map-feature:hover {
-  fill: rgba(255, 215, 0, 0.38);
+  fill: rgba(245, 183, 74, 0.9);
 }
 
 .feature-target {

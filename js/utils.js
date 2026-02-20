@@ -149,6 +149,13 @@
   function createProjection(type) {
     const normalized = String(type || "mercator").toLowerCase();
     if (
+      normalized === "equirectangular" ||
+      normalized === "eqc" ||
+      normalized === "platecarree"
+    ) {
+      return d3.geoEquirectangular();
+    }
+    if (
       normalized === "naturalearth1" ||
       normalized === "natural-earth" ||
       normalized === "natural-earth-1"
@@ -159,6 +166,37 @@
       return d3.geoEqualEarth();
     }
     return d3.geoMercator();
+  }
+
+  function createBoundsFeature(bounds) {
+    if (!Array.isArray(bounds) || bounds.length < 2) {
+      return null;
+    }
+    const sw = bounds[0] || [];
+    const ne = bounds[1] || [];
+    const minLon = Number(sw[0]);
+    const minLat = Number(sw[1]);
+    const maxLon = Number(ne[0]);
+    const maxLat = Number(ne[1]);
+
+    if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) {
+      return null;
+    }
+
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [minLon, minLat],
+          [maxLon, minLat],
+          [maxLon, maxLat],
+          [minLon, maxLat],
+          [minLon, minLat],
+        ]],
+      },
+      properties: {},
+    };
   }
 
   function renderMap(geojsonData, svgContainer, options) {
@@ -183,6 +221,8 @@
     const projectionType = opts.projection || "mercator";
     const basemapClass = opts.basemapClass || "";
     const outlineClass = opts.outlineClass || "";
+    const featureClass = opts.featureClass || "";
+    const fitFeature = createBoundsFeature(opts.fitBounds) || geojsonData;
 
     const host = d3.select(container);
     host.selectAll("*").remove();
@@ -206,7 +246,7 @@
         [padding, padding],
         [width - padding, height - padding],
       ],
-      geojsonData
+      fitFeature
     );
 
     const path = d3.geoPath().projection(projection);
@@ -227,7 +267,7 @@
       .selectAll("path")
       .data(geojsonData.features)
       .join("path")
-      .attr("class", "map-feature")
+      .attr("class", ["map-feature", featureClass].filter(Boolean).join(" "))
       .attr("data-name", (d) => getFeatureName(d))
       .attr("d", path);
 

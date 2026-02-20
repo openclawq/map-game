@@ -320,10 +320,11 @@
   function getMapRenderPreset(scope, isReview) {
     const world = scope === "world";
     return {
-      projection: world ? "naturalEarth1" : "mercator",
+      projection: world ? "naturalEarth1" : "equirectangular",
       mapThemeClass: world ? "map-theme-world" : "map-theme-china",
       padding: isReview ? (world ? 10 : 8) : world ? 12 : 10,
       scaleExtent: isReview ? [1, 8] : [1, 12],
+      fitBounds: world ? null : [[73.5, 18], [135.1, 53.6]],
     };
   }
 
@@ -340,6 +341,8 @@
       projection: preset.projection,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
+      featureClass: state.mode === "province-click" ? "map-feature-no-border" : "",
+      fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "game-map",
     });
@@ -590,6 +593,7 @@
       projection: preset.projection,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
+      fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "review-map",
     });
