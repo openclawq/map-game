@@ -220,6 +220,7 @@
     const zoomable = opts.zoomable !== false;
     const scaleExtent = opts.scaleExtent || [1, 8];
     const projectionType = opts.projection || "mercator";
+    const basemapFeature = opts.basemapFeature || geojsonData;
     const basemapClass = opts.basemapClass || "";
     const outlineClass = opts.outlineClass || "";
     const outlineFeature = opts.outlineFeature || geojsonData;
@@ -255,7 +256,7 @@
 
     baseLayer
       .append("path")
-      .datum(geojsonData)
+      .datum(basemapFeature)
       .attr("class", ["map-basemap", basemapClass].filter(Boolean).join(" "))
       .attr("d", path);
 
@@ -335,25 +336,44 @@
         return null;
       }
 
-      const pa = projection([Number(a.lon), Number(a.lat)]);
-      const pb = projection([Number(b.lon), Number(b.lat)]);
-      if (!pa || !pb) {
+      const lineGeo = {
+        type: "LineString",
+        coordinates: [
+          [Number(a.lon), Number(a.lat)],
+          [Number(b.lon), Number(b.lat)],
+        ],
+      };
+      const d = path(lineGeo);
+      if (!d) {
         return null;
       }
 
-      return lineLayer
-        .append("line")
-        .attr("class", className || "distance-line")
-        .attr("x1", pa[0])
-        .attr("y1", pa[1])
-        .attr("x2", pb[0])
-        .attr("y2", pb[1]);
+      return lineLayer.append("path").attr("class", className || "distance-line").attr("d", d);
     }
 
     function resetView() {
       if (zoomable && zoomBehavior) {
         svg.transition().duration(220).call(zoomBehavior.transform, d3.zoomIdentity);
       }
+    }
+
+    function zoomToScale(scale) {
+      if (!zoomable || !zoomBehavior) {
+        return;
+      }
+      const target = clamp(Number(scale) || 1, scaleExtent[0], scaleExtent[1]);
+      svg.call(zoomBehavior.scaleTo, target);
+    }
+
+    function panBy(dx, dy) {
+      if (!zoomable || !zoomBehavior) {
+        return;
+      }
+      const tx = Number(dx) || 0;
+      const ty = Number(dy) || 0;
+      const t = currentTransform || d3.zoomIdentity;
+      const next = d3.zoomIdentity.translate(t.x + tx, t.y + ty).scale(t.k);
+      svg.call(zoomBehavior.transform, next);
     }
 
     return {
@@ -366,6 +386,8 @@
       drawMarker,
       drawLine,
       resetView,
+      zoomToScale,
+      panBy,
       getTransform() {
         return currentTransform;
       },

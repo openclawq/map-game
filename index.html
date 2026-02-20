@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>地理知识问答 - 三国风</title>
-  <link rel="stylesheet" href="css/style.css?v=20260220-6" />
+  <link rel="stylesheet" href="css/style.css?v=20260220-8" />
 </head>
 <body>
   <div class="bg-pattern" aria-hidden="true"></div>
@@ -22,12 +22,49 @@
         <button data-mode="world-city">世界城市定位</button>
       </div>
 
-      <div class="card difficulty-box">
-        <label for="province-difficulty">省份挑战难度</label>
-        <select id="province-difficulty" aria-label="省份挑战难度选择">
-          <option value="easy">简单（悬停提示）</option>
-          <option value="hard">困难（关闭悬停提示）</option>
-        </select>
+      <div class="card difficulty-panel">
+        <div class="difficulty-row">
+          <label for="province-difficulty">省份挑战难度</label>
+          <select id="province-difficulty" aria-label="省份挑战难度选择">
+            <option value="easy">简单（悬停提示）</option>
+            <option value="hard">困难（关闭悬停提示）</option>
+          </select>
+        </div>
+        <div class="difficulty-row">
+          <label for="city-difficulty">省会挑战难度</label>
+          <select id="city-difficulty" aria-label="省会挑战难度选择">
+            <option value="easy">简单（显示省界）</option>
+            <option value="hard">困难（隐藏省界）</option>
+            <option value="super">超级（加入第二大城市）</option>
+          </select>
+        </div>
+        <div class="difficulty-row">
+          <label for="world-country-difficulty">世界国家难度</label>
+          <select id="world-country-difficulty" aria-label="世界国家难度选择">
+            <option value="all">全部国家</option>
+            <option value="top50">Top 50 国家</option>
+          </select>
+        </div>
+        <div class="difficulty-row">
+          <label for="world-city-difficulty">世界城市难度</label>
+          <select id="world-city-difficulty" aria-label="世界城市难度选择">
+            <option value="top50">Top 50 城市</option>
+            <option value="top200" selected>Top 200 城市</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card rules-box" id="rules-box">
+        <h3>游戏规则</h3>
+        <p>1. 每局 10 题；点击地图作答，系统自动判分。</p>
+        <p>2. 省份/国家题：点中目标区域算正确；答对答错都 2 秒自动下一题。</p>
+        <p>3. 城市题：按点击点到目标点的球面距离计分，误差越小越好。</p>
+        <p>4. 可用“倍率”和“上下左右”按钮放大并平移地图，便于点击小区域。</p>
+      </div>
+
+      <div class="card records-box" id="records-box">
+        <h3>个人最佳成绩</h3>
+        <div id="records-content" class="records-content">暂无记录</div>
       </div>
 
       <p id="loading-text" class="muted">正在加载地图与题库数据...</p>
@@ -47,6 +84,19 @@
       </div>
 
       <div id="map-container" class="map-shell" aria-label="地图答题区域"></div>
+
+      <div id="map-tools" class="card map-tools">
+        <div class="map-tools-row">
+          <button id="view-scale-btn" type="button">倍率：标准</button>
+          <button id="map-reset-btn" type="button" class="secondary">重置视图</button>
+        </div>
+        <div class="map-pan-grid" aria-label="地图平移控制">
+          <button id="pan-up-btn" type="button" class="secondary pan-btn">上</button>
+          <button id="pan-left-btn" type="button" class="secondary pan-btn">左</button>
+          <button id="pan-down-btn" type="button" class="secondary pan-btn">下</button>
+          <button id="pan-right-btn" type="button" class="secondary pan-btn">右</button>
+        </div>
+      </div>
 
       <div id="dev-tools" class="card dev-tools hidden" aria-label="开发日志面板">
         <div class="dev-tools-header">
@@ -74,6 +124,7 @@
       <div id="history-list" class="card history"></div>
       <div class="card controls">
         <button id="restart-btn">再来一局</button>
+        <button id="share-btn">分享挑战</button>
         <button id="home-btn" class="secondary">返回首页</button>
       </div>
       <p id="result-version" class="version-text">版本：-</p>
@@ -81,7 +132,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="js/utils.js?v=20260220-6"></script>
-  <script src="js/game.js?v=20260220-6"></script>
+  <script src="js/utils.js?v=20260220-8"></script>
+  <script src="js/game.js?v=20260220-8"></script>
 </body>
 </html>
