@@ -370,7 +370,7 @@ button.secondary {
 }
 
 .map-feature-hard:hover {
-  fill: rgba(118, 64, 29, 0.62) !important;
+  fill: transparent !important;
 }
 
 .feature-target {

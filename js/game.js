@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.10";
+  const APP_VERSION = "v2026.02.20.11";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -934,10 +934,73 @@
     );
   }
 
+  function getChinaSupplementFeatures(chinaOutline) {
+    const provinces = state.data.chinaProvinces;
+    const features = provinces && Array.isArray(provinces.features) ? provinces.features : [];
+    if (!features.length) {
+      return [];
+    }
+
+    const supplements = [];
+
+    const taiwan = features.find(
+      (feature) =>
+        Utils.normalizeName(Utils.getFeatureName(feature)) === Utils.normalizeName("台湾省")
+    );
+    if (taiwan) {
+      let includeTaiwan = true;
+      if (chinaOutline) {
+        try {
+          const c = getFeatureCenter(taiwan);
+          includeTaiwan = !d3.geoContains(chinaOutline, [Number(c.lon), Number(c.lat)]);
+        } catch (err) {
+          includeTaiwan = true;
+        }
+      }
+      if (includeTaiwan) {
+        supplements.push(taiwan);
+      }
+    }
+
+    features.forEach((feature) => {
+      const props = feature && feature.properties ? feature.properties : {};
+      const adchar = String(props.adchar || "").toUpperCase();
+      const adcode = String(props.adcode || "");
+      if (adchar === "JD" || adcode.endsWith("_JD")) {
+        supplements.push(feature);
+      }
+    });
+
+    return supplements;
+  }
+
+  function buildChinaBasemapFeature(chinaOutline) {
+    const supplements = getChinaSupplementFeatures(chinaOutline);
+    if (!chinaOutline) {
+      if (!supplements.length) {
+        return state.data.chinaProvinces || null;
+      }
+      return {
+        type: "FeatureCollection",
+        features: supplements,
+      };
+    }
+
+    if (!supplements.length) {
+      return chinaOutline;
+    }
+
+    return {
+      type: "FeatureCollection",
+      features: [chinaOutline, ...supplements],
+    };
+  }
+
   function renderGameMap() {
     const scope = MODE_CONFIG[state.mode].scope;
     const preset = getMapRenderPreset(scope, false);
     const chinaOutline = scope === "china" ? getChinaOutlineFeature() : null;
+    const chinaBasemap = scope === "china" ? buildChinaBasemapFeature(chinaOutline) : null;
     const featureClasses = [];
     const cityHardMode =
       state.mode === "city-click" &&
@@ -960,15 +1023,20 @@
       scaleExtent: preset.scaleExtent,
       padding: preset.padding,
       projection: preset.projection,
-      basemapFeature: chinaOutline || state.activeGeoJson,
+      basemapFeature: chinaBasemap || state.activeGeoJson,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
-      outlineFeature: chinaOutline || state.activeGeoJson,
+      outlineFeature: chinaBasemap || state.activeGeoJson,
       featureClass: featureClasses.join(" "),
       fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "game-map",
     });
+
+    // Make hard city mode deterministic: no province borders and no hover highlight.
+    if (cityHardMode) {
+      state.mapContext.features.classed("map-feature-no-border", true).classed("map-feature-hard", true);
+    }
 
     state.viewScaleIndex = 0;
     syncMapScaleButton();
@@ -1032,6 +1100,7 @@
     if (!state.awaitingAnswer || !state.currentTarget || !state.mapContext) {
       return;
     }
+    const pointerType = event && event.pointerType ? event.pointerType : "mouse";
 
     const upPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
     const downPoint = state.downPoint || upPoint;
@@ -1052,8 +1121,9 @@
     }
 
     if (touchGesture || transformChanged) {
+      setFeedback("检测到缩放或拖动，请轻点地图作答。", "warn");
       addDevLog("gesture_skip", {
-        pointerType: event && event.pointerType,
+        pointerType,
         touchGesture,
         transformChanged,
       });
@@ -1061,7 +1131,13 @@
     }
 
     const moved = Math.hypot(upPoint.x - downPoint.x, upPoint.y - downPoint.y);
-    if (moved > 8) {
+    const movementThreshold = pointerType === "touch" ? 18 : 8;
+    if (moved > movementThreshold) {
+      setFeedback("检测到拖动，请轻点地图作答。", "warn");
+      addDevLog("drag_skip", {
+        pointerType,
+        movedPx: Number(moved.toFixed(2)),
+      });
       return;
     }
 
@@ -1506,6 +1582,7 @@
     const scope = MODE_CONFIG[state.mode].scope;
     const preset = getMapRenderPreset(scope, true);
     const chinaOutline = scope === "china" ? getChinaOutlineFeature() : null;
+    const chinaBasemap = scope === "china" ? buildChinaBasemapFeature(chinaOutline) : null;
     const geojson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
@@ -1514,10 +1591,10 @@
       scaleExtent: preset.scaleExtent,
       padding: preset.padding,
       projection: preset.projection,
-      basemapFeature: chinaOutline || geojson,
+      basemapFeature: chinaBasemap || geojson,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
-      outlineFeature: chinaOutline || geojson,
+      outlineFeature: chinaBasemap || geojson,
       fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "review-map",
