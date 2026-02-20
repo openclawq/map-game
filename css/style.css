@@ -131,14 +131,29 @@ body {
   width: min(96vw, 1580px);
   margin: 0 auto 10px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 12px;
 }
 
 .map-tools-main {
   display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.map-primary-row {
+  flex-wrap: wrap;
+}
+
+.assist-tools {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -365,12 +380,14 @@ button.secondary {
   fill: transparent;
 }
 
-.map-feature:hover {
-  fill: rgba(245, 183, 74, 0.9);
-}
+@media (hover: hover) and (pointer: fine) {
+  .map-feature:hover {
+    fill: rgba(245, 183, 74, 0.9);
+  }
 
-.map-feature-hard:hover {
-  fill: transparent !important;
+  .map-feature-hard:hover {
+    fill: transparent !important;
+  }
 }
 
 .feature-target {
@@ -537,6 +554,12 @@ button.secondary {
 
   .map-tools-row button {
     flex: 1 1 48%;
+  }
+
+  .assist-tools {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .map-pan-pad {

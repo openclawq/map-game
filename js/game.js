@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.12";
+  const APP_VERSION = "v2026.02.20.13";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -97,6 +97,7 @@
   };
   const STORAGE_KEYS = {
     records: "map-game-records",
+    assistTools: "map-game-assist-tools",
   };
 
   const MODE_CONFIG = {
@@ -140,6 +141,7 @@
       cityDifficulty: "easy",
       worldCountryDifficulty: "all",
       worldCityDifficulty: "top200",
+      showAssistTools: false,
     },
     data: {
       chinaProvinces: null,
@@ -211,6 +213,8 @@
     els.panLeftBtn = document.getElementById("pan-left-btn");
     els.panDownBtn = document.getElementById("pan-down-btn");
     els.panRightBtn = document.getElementById("pan-right-btn");
+    els.assistToggleBtn = document.getElementById("assist-toggle-btn");
+    els.assistTools = document.getElementById("assist-tools");
     els.nextBtn = document.getElementById("next-btn");
     els.quitBtn = document.getElementById("quit-btn");
 
@@ -309,6 +313,11 @@
     if (els.panRightBtn) {
       els.panRightBtn.addEventListener("click", () => panGameMap(MAP_PAN_STEP_PX, 0));
     }
+    if (els.assistToggleBtn) {
+      els.assistToggleBtn.addEventListener("click", () => {
+        setAssistToolsVisible(!state.settings.showAssistTools, true);
+      });
+    }
 
     if (els.devCopyBtn) {
       els.devCopyBtn.addEventListener("click", copyDevLogs);
@@ -378,7 +387,28 @@
       els.worldCityDifficulty.value = state.settings.worldCityDifficulty;
     }
 
+    state.settings.showAssistTools =
+      window.localStorage.getItem(STORAGE_KEYS.assistTools) === "1";
+    setAssistToolsVisible(state.settings.showAssistTools, false);
+
     syncMapScaleButton();
+  }
+
+  function setAssistToolsVisible(flag, persist) {
+    const visible = !!flag;
+    state.settings.showAssistTools = visible;
+
+    if (els.assistTools) {
+      els.assistTools.classList.toggle("hidden", !visible);
+    }
+    if (els.assistToggleBtn) {
+      els.assistToggleBtn.textContent = visible ? "隐藏辅助键" : "显示辅助键";
+      els.assistToggleBtn.setAttribute("aria-expanded", visible ? "true" : "false");
+    }
+
+    if (persist !== false) {
+      window.localStorage.setItem(STORAGE_KEYS.assistTools, visible ? "1" : "0");
+    }
   }
 
   function syncMapScaleButton() {
@@ -845,6 +875,7 @@
     }
 
     showPage("game-page");
+    setAssistToolsVisible(state.settings.showAssistTools, false);
     els.modeTitle.textContent = MODE_CONFIG[mode].title;
     addDevLog("game_start", {
       mode,
@@ -1226,6 +1257,7 @@
       clickGeo: geo,
       clickScreen: screenPoint,
     });
+    highlightProvinceResult(target.name, clickedName, correct);
 
     if (correct) {
       setFeedback("回答正确。", "ok");
@@ -1345,11 +1377,7 @@
     state.awaitingAnswer = true;
 
     state.mapContext.clearOverlays();
-    state.mapContext.features
-      .classed("feature-target", false)
-      .classed("feature-selected", false)
-      .classed("feature-correct", false)
-      .classed("feature-wrong", false);
+    clearFeatureHighlightState();
 
     const q = state.currentTarget;
     const modeType = MODE_CONFIG[state.mode].type;
@@ -1381,6 +1409,17 @@
     } else {
       els.liveScore.textContent = `总误差：${Utils.formatDistance(state.totalDistance)}`;
     }
+  }
+
+  function clearFeatureHighlightState() {
+    if (!state.mapContext || !state.mapContext.features) {
+      return;
+    }
+    state.mapContext.features
+      .classed("feature-target", false)
+      .classed("feature-selected", false)
+      .classed("feature-correct", false)
+      .classed("feature-wrong", false);
   }
 
   function handleNext() {
