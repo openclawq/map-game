@@ -183,17 +183,18 @@
       return null;
     }
 
+    // Use MultiPoint instead of Polygon to avoid winding-direction ambiguity
+    // in spherical geometry when fitting projected bounds.
     return {
       type: "Feature",
       geometry: {
-        type: "Polygon",
-        coordinates: [[
+        type: "MultiPoint",
+        coordinates: [
           [minLon, minLat],
           [maxLon, minLat],
           [maxLon, maxLat],
           [minLon, maxLat],
-          [minLon, minLat],
-        ]],
+        ],
       },
       properties: {},
     };
@@ -221,6 +222,7 @@
     const projectionType = opts.projection || "mercator";
     const basemapClass = opts.basemapClass || "";
     const outlineClass = opts.outlineClass || "";
+    const outlineFeature = opts.outlineFeature || geojsonData;
     const featureClass = opts.featureClass || "";
     const fitFeature = createBoundsFeature(opts.fitBounds) || geojsonData;
 
@@ -259,7 +261,7 @@
 
     baseLayer
       .append("path")
-      .datum(geojsonData)
+      .datum(outlineFeature)
       .attr("class", ["map-outline", outlineClass].filter(Boolean).join(" "))
       .attr("d", path);
 

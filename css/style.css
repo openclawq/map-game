@@ -274,6 +274,40 @@ button.secondary {
   gap: 10px;
 }
 
+.dev-tools {
+  width: min(96vw, 1580px);
+  margin: 0 auto 10px;
+  padding: 10px 12px;
+}
+
+.dev-tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dev-tools-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dev-tools textarea {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #2d1b12;
+  background: rgba(255, 248, 232, 0.95);
+  border: 1px solid #8b5a33;
+  border-radius: 8px;
+  padding: 8px;
+}
+
 .result-title {
   text-align: center;
   margin: 14px 0;
@@ -347,6 +381,11 @@ button.secondary {
 
   .controls button {
     flex: 1 1 45%;
+  }
+
+  .dev-tools-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

@@ -39,6 +39,18 @@
 
       <div id="map-container" class="map-shell" aria-label="地图答题区域"></div>
 
+      <div id="dev-tools" class="card dev-tools hidden" aria-label="开发日志面板">
+        <div class="dev-tools-header">
+          <strong>开发日志（隐藏功能）</strong>
+          <div class="dev-tools-actions">
+            <button id="dev-copy-btn" type="button">复制日志</button>
+            <button id="dev-clear-btn" type="button" class="secondary">清空</button>
+            <button id="dev-toggle-btn" type="button" class="secondary">隐藏</button>
+          </div>
+        </div>
+        <textarea id="dev-log-output" readonly spellcheck="false"></textarea>
+      </div>
+
       <div id="controls" class="card controls">
         <button id="next-btn" disabled>下一题</button>
         <button id="quit-btn" class="secondary">返回首页</button>

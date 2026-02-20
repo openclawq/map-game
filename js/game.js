@@ -51,6 +51,12 @@
     reviewMapContext: null,
     activeGeoJson: null,
     downPoint: null,
+    autoNextTimer: null,
+    dev: {
+      enabled: false,
+      logs: [],
+      maxLogs: 300,
+    },
   };
 
   const els = {};
@@ -60,6 +66,7 @@
   function init() {
     cacheElements();
     bindEvents();
+    initDevTools();
     setModeButtonsDisabled(true);
     loadData();
   }
@@ -92,6 +99,12 @@
     els.historyList = document.getElementById("history-list");
     els.restartBtn = document.getElementById("restart-btn");
     els.homeBtn = document.getElementById("home-btn");
+
+    els.devTools = document.getElementById("dev-tools");
+    els.devLogOutput = document.getElementById("dev-log-output");
+    els.devCopyBtn = document.getElementById("dev-copy-btn");
+    els.devClearBtn = document.getElementById("dev-clear-btn");
+    els.devToggleBtn = document.getElementById("dev-toggle-btn");
   }
 
   function bindEvents() {
@@ -114,6 +127,96 @@
         showHome();
       }
     });
+
+    if (els.devCopyBtn) {
+      els.devCopyBtn.addEventListener("click", copyDevLogs);
+    }
+    if (els.devClearBtn) {
+      els.devClearBtn.addEventListener("click", clearDevLogs);
+    }
+    if (els.devToggleBtn) {
+      els.devToggleBtn.addEventListener("click", () => {
+        setDevMode(!state.dev.enabled, true);
+      });
+    }
+    document.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        setDevMode(!state.dev.enabled, true);
+      }
+    });
+  }
+
+  function initDevTools() {
+    const enabledByQuery = /(?:\?|&)devlog=1(?:&|$)/.test(window.location.search);
+    const enabledByStorage = window.localStorage.getItem("map-game-devlog") === "1";
+    setDevMode(enabledByQuery || enabledByStorage, false);
+  }
+
+  function setDevMode(flag, persist) {
+    state.dev.enabled = !!flag;
+    if (persist !== false) {
+      window.localStorage.setItem("map-game-devlog", state.dev.enabled ? "1" : "0");
+    }
+    if (els.devTools) {
+      els.devTools.classList.toggle("hidden", !state.dev.enabled);
+    }
+    renderDevLogs();
+    if (state.dev.enabled) {
+      addDevLog("system", {
+        message: "开发日志已开启（可用 Ctrl+Shift+D 开关）",
+      });
+    }
+  }
+
+  function addDevLog(type, payload) {
+    if (!state.dev.enabled) {
+      return;
+    }
+    const entry = {
+      time: new Date().toISOString(),
+      mode: state.mode || null,
+      index: state.currentQuestion + 1,
+      type,
+      payload: payload || {},
+    };
+    state.dev.logs.push(entry);
+    if (state.dev.logs.length > state.dev.maxLogs) {
+      state.dev.logs.splice(0, state.dev.logs.length - state.dev.maxLogs);
+    }
+    renderDevLogs();
+  }
+
+  function renderDevLogs() {
+    if (!els.devLogOutput) {
+      return;
+    }
+    els.devLogOutput.value = state.dev.logs
+      .map((item) => JSON.stringify(item))
+      .join("\n");
+    els.devLogOutput.scrollTop = els.devLogOutput.scrollHeight;
+  }
+
+  async function copyDevLogs() {
+    if (!els.devLogOutput) {
+      return;
+    }
+    const text = els.devLogOutput.value || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      setFeedback("开发日志已复制。", "ok");
+    } catch (err) {
+      els.devLogOutput.focus();
+      els.devLogOutput.select();
+      document.execCommand("copy");
+      setFeedback("开发日志已复制。", "ok");
+    }
+  }
+
+  function clearDevLogs() {
+    state.dev.logs = [];
+    renderDevLogs();
+    addDevLog("system", { message: "日志已清空" });
   }
 
   async function loadData() {
@@ -129,8 +232,8 @@
           d3.json("data/world-cities.json"),
         ]);
 
-      state.data.chinaProvinces = chinaProvinces;
-      state.data.worldCountries = worldCountries;
+      state.data.chinaProvinces = normalizeGeoJsonOrientation(chinaProvinces);
+      state.data.worldCountries = normalizeGeoJsonOrientation(worldCountries);
       state.data.chinaCities = sanitizeChinaCities(chinaCities || []);
       state.data.worldCities = sanitizeWorldCities(worldCities || []);
       state.dataReady = true;
@@ -158,6 +261,60 @@
         province: item.province || "",
         country: "China",
       }));
+  }
+
+  function normalizeGeoJsonOrientation(geojson) {
+    if (!geojson || !Array.isArray(geojson.features)) {
+      return geojson;
+    }
+    const threshold = 2 * Math.PI;
+    const features = geojson.features.map((feature) => {
+      if (!feature || !feature.geometry) {
+        return feature;
+      }
+
+      let area = 0;
+      try {
+        area = d3.geoArea(feature);
+      } catch (err) {
+        return feature;
+      }
+
+      if (!(area > threshold)) {
+        return feature;
+      }
+      return reverseFeatureRings(feature);
+    });
+
+    return { ...geojson, features };
+  }
+
+  function reverseFeatureRings(feature) {
+    const geometry = feature.geometry || {};
+    const type = geometry.type;
+    let coordinates = geometry.coordinates;
+
+    if (type === "Polygon" && Array.isArray(coordinates)) {
+      coordinates = coordinates.map((ring) =>
+        Array.isArray(ring) ? [...ring].reverse() : ring
+      );
+    } else if (type === "MultiPolygon" && Array.isArray(coordinates)) {
+      coordinates = coordinates.map((polygon) =>
+        Array.isArray(polygon)
+          ? polygon.map((ring) => (Array.isArray(ring) ? [...ring].reverse() : ring))
+          : polygon
+      );
+    } else {
+      return feature;
+    }
+
+    return {
+      ...feature,
+      geometry: {
+        ...geometry,
+        coordinates,
+      },
+    };
   }
 
   function sanitizeWorldCities(list) {
@@ -207,6 +364,7 @@
   }
 
   function showHome() {
+    clearAutoNextTimer();
     setFeedback("");
     clearError();
     showPage("home-page");
@@ -228,6 +386,7 @@
     state.totalQuestions = state.questions.length;
     state.history = [];
     state.awaitingAnswer = false;
+    clearAutoNextTimer();
 
     if (!state.questions.length) {
       showError("题库数据不足，无法开始该模式。");
@@ -236,6 +395,11 @@
 
     showPage("game-page");
     els.modeTitle.textContent = MODE_CONFIG[mode].title;
+    addDevLog("game_start", {
+      mode,
+      title: MODE_CONFIG[mode].title,
+      totalQuestions: state.totalQuestions,
+    });
     renderGameMap();
     renderQuestion();
   }
@@ -328,9 +492,23 @@
     };
   }
 
+  function getChinaOutlineFeature() {
+    const world = state.data.worldCountries;
+    if (!world || !Array.isArray(world.features)) {
+      return null;
+    }
+    return (
+      world.features.find(
+        (feature) =>
+          Utils.normalizeName(Utils.getFeatureName(feature)) === Utils.normalizeName("China")
+      ) || null
+    );
+  }
+
   function renderGameMap() {
     const scope = MODE_CONFIG[state.mode].scope;
     const preset = getMapRenderPreset(scope, false);
+    const chinaOutline = scope === "china" ? getChinaOutlineFeature() : null;
     state.activeGeoJson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
@@ -341,6 +519,7 @@
       projection: preset.projection,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
+      outlineFeature: chinaOutline || state.activeGeoJson,
       featureClass: state.mode === "province-click" ? "map-feature-no-border" : "",
       fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
@@ -370,36 +549,49 @@
       return;
     }
 
-    submitAnswerByScreenPoint(upPoint.x, upPoint.y);
-  }
-
-  function submitAnswerByScreenPoint(x, y) {
+    const modeType = MODE_CONFIG[state.mode].type;
     const geo = Utils.screenToGeo(
-      x,
-      y,
+      upPoint.x,
+      upPoint.y,
       state.mapContext.projection,
       state.mapContext.getTransform()
     );
 
-    if (!geo) {
-      setFeedback("请点击地图有效区域。", "warn");
-      return;
-    }
-
-    if (MODE_CONFIG[state.mode].type === "province") {
-      handleProvinceAnswer(geo);
+    if (modeType === "province") {
+      const feature = getFeatureFromEvent(event);
+      handleProvinceAnswer({
+        geo,
+        feature,
+        screenPoint: upPoint,
+      });
     } else {
+      if (!geo) {
+        setFeedback("请点击地图有效区域。", "warn");
+        addDevLog("city_click_invalid", { screenPoint: upPoint });
+        return;
+      }
       handleCityAnswer(geo);
     }
   }
 
-  function handleProvinceAnswer(geo) {
+  function getFeatureFromEvent(event) {
+    const rawTarget = event && event.target;
+    if (!rawTarget || typeof rawTarget.closest !== "function") {
+      return null;
+    }
+    const pathEl = rawTarget.closest("path.map-feature");
+    if (!pathEl) {
+      return null;
+    }
+    return d3.select(pathEl).datum() || null;
+  }
+
+  function handleProvinceAnswer(input) {
+    const payload = input || {};
+    const geo = payload.geo || null;
+    const feature = payload.feature || null;
+    const screenPoint = payload.screenPoint || null;
     const target = state.currentTarget;
-    const feature = Utils.findFeatureByPoint(
-      geo.lon,
-      geo.lat,
-      state.activeGeoJson.features
-    );
     const clickedName = feature ? Utils.getFeatureName(feature) : null;
     const correct =
       !!clickedName &&
@@ -418,17 +610,26 @@
       isCorrect: correct,
     });
 
+    addDevLog("province_click", {
+      question: target.name,
+      clickedName: clickedName || null,
+      isCorrect: correct,
+      clickGeo: geo,
+      clickScreen: screenPoint,
+    });
+
     highlightProvinceResult(target.name, clickedName, correct);
 
     if (correct) {
       setFeedback("回答正确。", "ok");
+      finalizeQuestion();
     } else if (clickedName) {
-      setFeedback(`未命中，点击了：${clickedName}。`, "error");
+      setFeedback(`未命中，点击了：${clickedName}。正确答案：${target.name}。`, "error");
+      finalizeQuestion({ autoNextMs: 2000 });
     } else {
-      setFeedback("未命中有效行政区。", "error");
+      setFeedback(`未命中有效行政区。正确答案：${target.name}。`, "error");
+      finalizeQuestion({ autoNextMs: 2000 });
     }
-
-    finalizeQuestion();
   }
 
   function highlightProvinceResult(targetName, clickedName, correct) {
@@ -491,16 +692,45 @@
       radius: 5,
     });
 
-    setFeedback(`误差：${Utils.formatDistance(distance)}`, distance <= 300 ? "ok" : "warn");
-    finalizeQuestion();
+    addDevLog("city_click", {
+      question: target.prompt,
+      targetGeo: target.actualPosition,
+      clickGeo: geo,
+      distanceKm: Number(distance.toFixed(3)),
+      isCorrect: distance <= 300,
+    });
+
+    if (distance <= 300) {
+      setFeedback(`误差：${Utils.formatDistance(distance)}`, "ok");
+      finalizeQuestion();
+    } else {
+      setFeedback(
+        `误差：${Utils.formatDistance(distance)}。正确位置：${target.prompt}。`,
+        "warn"
+      );
+      finalizeQuestion({ autoNextMs: 2000 });
+    }
   }
 
-  function finalizeQuestion() {
+  function finalizeQuestion(options) {
+    const opts = options || {};
+    const autoNextMs = Number.isFinite(opts.autoNextMs) ? Number(opts.autoNextMs) : 0;
+    clearAutoNextTimer();
     state.awaitingAnswer = false;
     updateLiveScore();
+
+    const isLast = state.currentQuestion >= state.totalQuestions - 1;
     els.nextBtn.disabled = false;
-    els.nextBtn.textContent =
-      state.currentQuestion >= state.totalQuestions - 1 ? "查看结果" : "下一题";
+    els.nextBtn.textContent = isLast ? "查看结果" : "下一题";
+
+    if (autoNextMs > 0) {
+      els.nextBtn.disabled = true;
+      els.nextBtn.textContent = isLast ? "2秒后查看结果" : "2秒后自动下一题";
+      state.autoNextTimer = window.setTimeout(() => {
+        state.autoNextTimer = null;
+        handleNext();
+      }, autoNextMs);
+    }
   }
 
   function renderQuestion() {
@@ -528,6 +758,14 @@
     els.nextBtn.textContent = "下一题";
     setFeedback("");
     updateLiveScore();
+
+    addDevLog("question", {
+      mode: state.mode,
+      order: state.currentQuestion + 1,
+      total: state.totalQuestions,
+      prompt: q.prompt,
+      answer: q.name,
+    });
   }
 
   function updateLiveScore() {
@@ -539,6 +777,7 @@
   }
 
   function handleNext() {
+    clearAutoNextTimer();
     if (state.awaitingAnswer) {
       return;
     }
@@ -553,6 +792,7 @@
   }
 
   function finishGame() {
+    clearAutoNextTimer();
     if (MODE_CONFIG[state.mode].type === "province") {
       const correct = state.history.filter((h) => h.isCorrect).length;
       state.accuracy = correct / state.totalQuestions;
@@ -580,9 +820,17 @@
     renderHistoryList();
   }
 
+  function clearAutoNextTimer() {
+    if (state.autoNextTimer) {
+      window.clearTimeout(state.autoNextTimer);
+      state.autoNextTimer = null;
+    }
+  }
+
   function renderReviewMap() {
     const scope = MODE_CONFIG[state.mode].scope;
     const preset = getMapRenderPreset(scope, true);
+    const chinaOutline = scope === "china" ? getChinaOutlineFeature() : null;
     const geojson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
@@ -593,6 +841,7 @@
       projection: preset.projection,
       basemapClass: preset.mapThemeClass,
       outlineClass: preset.mapThemeClass,
+      outlineFeature: chinaOutline || geojson,
       fitBounds: preset.fitBounds,
       disableDoubleClickZoom: true,
       ariaLabel: "review-map",
