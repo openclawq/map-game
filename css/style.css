@@ -42,9 +42,9 @@ body {
 #app {
   position: relative;
   z-index: 1;
-  max-width: 1280px;
+  max-width: 1720px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 20px;
 }
 
 .page {
@@ -169,8 +169,8 @@ button.secondary {
 }
 
 .map-shell {
-  width: min(80vw, 1150px);
-  height: 70vh;
+  width: min(96vw, 1580px);
+  height: clamp(520px, 78vh, 920px);
   margin: 0 auto 10px;
   border: 3px solid var(--c-border);
   border-radius: 14px;
@@ -180,7 +180,7 @@ button.secondary {
 }
 
 .map-shell.review {
-  height: 46vh;
+  height: clamp(360px, 56vh, 640px);
 }
 
 .map-shell svg {
@@ -190,10 +190,33 @@ button.secondary {
   touch-action: none;
 }
 
+.map-basemap {
+  fill: rgba(219, 159, 93, 0.22);
+  pointer-events: none;
+}
+
+.map-basemap.map-theme-world {
+  fill: rgba(190, 145, 94, 0.2);
+}
+
+.map-outline {
+  fill: none;
+  stroke: #643012;
+  stroke-width: 1.9;
+  opacity: 0.95;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.map-outline.map-theme-world {
+  stroke-width: 1.25;
+}
+
 .map-feature {
-  fill: rgba(210, 105, 30, 0.28);
-  stroke: #7b3f15;
-  stroke-width: 0.9;
+  fill: rgba(210, 105, 30, 0.24);
+  stroke: #6f3a14;
+  stroke-width: 0.8;
+  stroke-opacity: 0.75;
   vector-effect: non-scaling-stroke;
   transition: fill 0.12s ease;
 }
@@ -240,7 +263,7 @@ button.secondary {
 }
 
 .controls {
-  width: min(80vw, 1150px);
+  width: min(96vw, 1580px);
   margin: 0 auto;
   display: flex;
   justify-content: center;
@@ -306,7 +329,7 @@ button.secondary {
 
   .map-shell {
     width: 100%;
-    height: 60vh;
+    height: 64vh;
   }
 
   .map-shell.review {
@@ -325,13 +348,13 @@ button.secondary {
 
 @media (min-width: 769px) {
   .map-shell {
-    width: 80%;
-    height: 70vh;
+    width: min(95vw, 1560px);
+    height: clamp(540px, 80vh, 960px);
     margin: 0 auto 10px;
   }
 
   .controls {
-    width: 80%;
+    width: min(95vw, 1560px);
   }
 }
 

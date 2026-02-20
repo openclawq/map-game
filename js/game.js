@@ -317,15 +317,29 @@
     return { lon: centroid[0], lat: centroid[1] };
   }
 
+  function getMapRenderPreset(scope, isReview) {
+    const world = scope === "world";
+    return {
+      projection: world ? "naturalEarth1" : "mercator",
+      mapThemeClass: world ? "map-theme-world" : "map-theme-china",
+      padding: isReview ? (world ? 10 : 8) : world ? 12 : 10,
+      scaleExtent: isReview ? [1, 8] : [1, 12],
+    };
+  }
+
   function renderGameMap() {
     const scope = MODE_CONFIG[state.mode].scope;
+    const preset = getMapRenderPreset(scope, false);
     state.activeGeoJson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
     state.mapContext = Utils.renderMap(state.activeGeoJson, els.mapContainer, {
       zoomable: true,
-      scaleExtent: [1, 12],
-      padding: 24,
+      scaleExtent: preset.scaleExtent,
+      padding: preset.padding,
+      projection: preset.projection,
+      basemapClass: preset.mapThemeClass,
+      outlineClass: preset.mapThemeClass,
       disableDoubleClickZoom: true,
       ariaLabel: "game-map",
     });
@@ -565,13 +579,17 @@
 
   function renderReviewMap() {
     const scope = MODE_CONFIG[state.mode].scope;
+    const preset = getMapRenderPreset(scope, true);
     const geojson =
       scope === "china" ? state.data.chinaProvinces : state.data.worldCountries;
 
     state.reviewMapContext = Utils.renderMap(geojson, els.mapReview, {
       zoomable: true,
-      scaleExtent: [1, 8],
-      padding: 18,
+      scaleExtent: preset.scaleExtent,
+      padding: preset.padding,
+      projection: preset.projection,
+      basemapClass: preset.mapThemeClass,
+      outlineClass: preset.mapThemeClass,
       disableDoubleClickZoom: true,
       ariaLabel: "review-map",
     });

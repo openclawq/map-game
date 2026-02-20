@@ -146,6 +146,21 @@
     };
   }
 
+  function createProjection(type) {
+    const normalized = String(type || "mercator").toLowerCase();
+    if (
+      normalized === "naturalearth1" ||
+      normalized === "natural-earth" ||
+      normalized === "natural-earth-1"
+    ) {
+      return d3.geoNaturalEarth1();
+    }
+    if (normalized === "equalearth" || normalized === "equal-earth") {
+      return d3.geoEqualEarth();
+    }
+    return d3.geoMercator();
+  }
+
   function renderMap(geojsonData, svgContainer, options) {
     const opts = options || {};
     const container =
@@ -165,6 +180,9 @@
     const padding = Number.isFinite(opts.padding) ? opts.padding : 24;
     const zoomable = opts.zoomable !== false;
     const scaleExtent = opts.scaleExtent || [1, 8];
+    const projectionType = opts.projection || "mercator";
+    const basemapClass = opts.basemapClass || "";
+    const outlineClass = opts.outlineClass || "";
 
     const host = d3.select(container);
     host.selectAll("*").remove();
@@ -178,21 +196,32 @@
       .style("touch-action", "none");
 
     const root = svg.append("g").attr("class", "map-root");
+    const baseLayer = root.append("g").attr("class", "base-layer");
     const featureLayer = root.append("g").attr("class", "feature-layer");
     const lineLayer = root.append("g").attr("class", "line-layer");
     const markerLayer = root.append("g").attr("class", "marker-layer");
 
-    const projection = d3
-      .geoMercator()
-      .fitExtent(
-        [
-          [padding, padding],
-          [width - padding, height - padding],
-        ],
-        geojsonData
-      );
+    const projection = createProjection(projectionType).fitExtent(
+      [
+        [padding, padding],
+        [width - padding, height - padding],
+      ],
+      geojsonData
+    );
 
     const path = d3.geoPath().projection(projection);
+
+    baseLayer
+      .append("path")
+      .datum(geojsonData)
+      .attr("class", ["map-basemap", basemapClass].filter(Boolean).join(" "))
+      .attr("d", path);
+
+    baseLayer
+      .append("path")
+      .datum(geojsonData)
+      .attr("class", ["map-outline", outlineClass].filter(Boolean).join(" "))
+      .attr("d", path);
 
     const features = featureLayer
       .selectAll("path")
