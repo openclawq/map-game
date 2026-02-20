@@ -83,20 +83,26 @@
         <span id="feedback" class="feedback"></span>
       </div>
 
-      <div id="map-container" class="map-shell" aria-label="地图答题区域"></div>
-
       <div id="map-tools" class="card map-tools">
-        <div class="map-tools-row">
-          <button id="view-scale-btn" type="button">倍率：标准</button>
-          <button id="map-reset-btn" type="button" class="secondary">重置视图</button>
+        <div class="map-tools-main">
+          <div class="map-tools-row">
+            <button id="view-scale-btn" type="button">倍率：标准</button>
+            <button id="map-reset-btn" type="button" class="secondary">重置视图</button>
+          </div>
+          <div class="map-tools-row">
+            <button id="next-btn" type="button" disabled>下一题</button>
+            <button id="quit-btn" type="button" class="secondary">返回首页</button>
+          </div>
         </div>
-        <div class="map-pan-grid" aria-label="地图平移控制">
-          <button id="pan-up-btn" type="button" class="secondary pan-btn">上</button>
-          <button id="pan-left-btn" type="button" class="secondary pan-btn">左</button>
-          <button id="pan-down-btn" type="button" class="secondary pan-btn">下</button>
-          <button id="pan-right-btn" type="button" class="secondary pan-btn">右</button>
+        <div class="map-pan-pad" aria-label="地图平移控制">
+          <button id="pan-up-btn" type="button" class="secondary pan-btn pan-up">上</button>
+          <button id="pan-left-btn" type="button" class="secondary pan-btn pan-left">左</button>
+          <button id="pan-right-btn" type="button" class="secondary pan-btn pan-right">右</button>
+          <button id="pan-down-btn" type="button" class="secondary pan-btn pan-down">下</button>
         </div>
       </div>
+
+      <div id="map-container" class="map-shell" aria-label="地图答题区域"></div>
 
       <div id="dev-tools" class="card dev-tools hidden" aria-label="开发日志面板">
         <div class="dev-tools-header">
@@ -110,10 +116,6 @@
         <textarea id="dev-log-output" readonly spellcheck="false"></textarea>
       </div>
 
-      <div id="controls" class="card controls">
-        <button id="next-btn" disabled>下一题</button>
-        <button id="quit-btn" class="secondary">返回首页</button>
-      </div>
       <p id="game-version" class="version-text">版本：-</p>
     </section>
 
@@ -132,7 +134,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="js/utils.js?v=20260220-9"></script>
-  <script src="js/game.js?v=20260220-9"></script>
+  <script src="js/utils.js?v=20260220-10"></script>
+  <script src="js/game.js?v=20260220-10"></script>
 </body>
 </html>

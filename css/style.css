@@ -136,6 +136,13 @@ body {
   gap: 12px;
 }
 
+.map-tools-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .map-tools-row {
   display: flex;
   align-items: center;
@@ -143,9 +150,14 @@ body {
   gap: 12px;
 }
 
-.map-pan-grid {
+.map-pan-pad {
   display: grid;
-  grid-template-columns: repeat(4, minmax(44px, 1fr));
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 36px);
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
   gap: 8px;
 }
 
@@ -154,8 +166,25 @@ body {
 }
 
 .pan-btn {
-  min-width: 44px;
-  padding: 8px 10px;
+  width: 44px;
+  height: 36px;
+  padding: 0;
+}
+
+.pan-up {
+  grid-area: up;
+}
+
+.pan-left {
+  grid-area: left;
+}
+
+.pan-right {
+  grid-area: right;
+}
+
+.pan-down {
+  grid-area: down;
 }
 
 .rules-box {
@@ -495,6 +524,13 @@ button.secondary {
     align-items: stretch;
   }
 
+  .map-tools-main {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
   .map-tools-row {
     width: 100%;
   }
@@ -503,9 +539,9 @@ button.secondary {
     flex: 1 1 48%;
   }
 
-  .map-pan-grid {
+  .map-pan-pad {
     width: 100%;
-    grid-template-columns: repeat(4, 1fr);
+    justify-content: center;
   }
 
   .header-row {
