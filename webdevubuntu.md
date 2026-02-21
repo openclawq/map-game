@@ -1,114 +1,205 @@
-# Ubuntu 无 GUI 网页调试指南（Headless）
+# Ubuntu 无 GUI Web 调试手册（可复用于其他项目）
 
-## 1. 先回答你的问题：没有 GUI 怎么“看”网页
-在无图形界面的机器上，常用方式是：
-- 用 **无头浏览器**（Playwright/Chromium headless）加载页面。
-- 读取 **DOM、CSS 计算结果、元素尺寸、位置、截图** 来判断页面状态。
-- 通过自动化测试复现问题并验证修复。
+## 1. 目标
+这份文档用于在 Ubuntu 无图形界面（headless）环境下，稳定完成 Web 开发调试、问题复现、回归验证与发布排查。
 
-我这次就是这样做的：
-- 跑 `npm test` 做回归。
-- 用 Playwright 脚本读取 `#map-container` 和地图路径的 `boundingBox`，确认地图显示占比。
-- 必要时导出截图到文件再查看。
+## 2. 核心原则
+1. 不依赖“肉眼看页面”，用可量化指标替代主观判断。
+2. 先复现再修复，修复后必须回归。
+3. 每次问题都沉淀成脚本或 checklist，避免重复踩坑。
+4. 缓存问题默认高概率存在，版本号与资源参数必须联动更新。
 
-## 2. 环境准备
+## 3. 基础环境
+安装依赖：
 ```bash
 npm install
 npx playwright install --with-deps
 ```
 
-## 3. 本地启动（无头调试）
-任选一种：
-
-1. 用项目已有测试配置自动起服务并运行测试
+常用启动方式：
 ```bash
+# 方式1：直接跑 E2E（通常会自动起服务）
 npm test
+
+# 方式2：手动静态服务
+npx http-server -p 8080 -s
+# 或 python3 -m http.server 8080
 ```
 
-2. 手动起静态服务
-```bash
-python3 -m http.server 8090
-# 或 npx http-server -p 8080 --silent
-```
-
-## 4. 用 Playwright 脚本检查页面
+## 4. 无 GUI 下“看页面”的方法
 ### 4.1 截图
 ```bash
-node - <<'PLAYSHOT'
+node - <<'NODE'
+const { chromium } = require('playwright');
+(async()=>{
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+  await page.goto('http://127.0.0.1:8080', { waitUntil: 'networkidle' });
+  await page.screenshot({ path: 'test-results/smoke.png', fullPage: true });
+  await browser.close();
+})();
+NODE
+```
+
+### 4.2 读取布局几何数据
+用于排查“地图太小/偏移/遮挡”：
+```bash
+node - <<'NODE'
 const { chromium } = require('playwright');
 (async()=>{
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-  await page.goto('http://localhost:8090/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#loading-text', { state: 'hidden', timeout: 20000 });
-  await page.click('button[data-mode="province-click"]');
+  await page.goto('http://127.0.0.1:8080', { waitUntil: 'networkidle' });
   await page.waitForSelector('#map-container svg');
-  await page.screenshot({ path: '/tmp/page.png', fullPage: true });
+  const box = await page.locator('#map-container').boundingBox();
+  console.log({ mapW: Math.round(box.width), mapH: Math.round(box.height) });
   await browser.close();
 })();
-PLAYSHOT
+NODE
 ```
 
-### 4.2 读取布局尺寸（判断“太小/太偏”最有效）
+### 4.3 读取 DOM 状态
+用于判断按钮、面板、错误提示是否符合预期：
 ```bash
-node - <<'PLAYBOX'
+node - <<'NODE'
 const { chromium } = require('playwright');
 (async()=>{
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-  await page.goto('http://localhost:8090/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#loading-text', { state: 'hidden', timeout: 20000 });
-  await page.click('button[data-mode="province-click"]');
-  await page.waitForSelector('#map-container svg');
-
-  const container = await page.locator('#map-container').boundingBox();
-  const paths = page.locator('#map-container path.map-feature');
-  const count = await paths.count();
-
-  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
-  for (let i = 0; i < count; i++) {
-    const b = await paths.nth(i).boundingBox();
-    if (!b) continue;
-    minX = Math.min(minX, b.x);
-    minY = Math.min(minY, b.y);
-    maxX = Math.max(maxX, b.x + b.width);
-    maxY = Math.max(maxY, b.y + b.height);
-  }
-
-  console.log('container:', Math.round(container.width), Math.round(container.height));
-  console.log('features:', Math.round(maxX-minX), Math.round(maxY-minY));
+  const page = await browser.newPage();
+  await page.goto('http://127.0.0.1:8080', { waitUntil: 'networkidle' });
+  const state = await page.evaluate(()=>({
+    version: document.querySelector('#home-version')?.textContent?.trim(),
+    hasMap: !!document.querySelector('#map-container svg'),
+    assistHidden: document.querySelector('#assist-tools')?.classList.contains('hidden')
+  }));
+  console.log(state);
   await browser.close();
 })();
-PLAYBOX
+NODE
 ```
 
-## 5. 无 GUI 场景下常用排查点
-- 数据是否加载成功：
-  - 看 `#loading-text` 是否 hidden。
-  - 看模式按钮是否 enabled。
-- 地图是否真的渲染：
-  - `#map-container svg` 是否存在。
-  - `path.map-feature` 数量是否 > 0。
-- 布局是否合理：
-  - 容器尺寸与地图路径外接框比值。
-- 交互是否正常：
-  - 用 Playwright 模拟滚轮缩放、拖拽平移、点击答题。
+## 5. 交互问题调试（重点）
+## 5.1 点击/拖动/缩放要分流
+常见 bug：拖动后点击失效、缩放被判成答题。
 
-## 6. 无 GUI 调试技巧
-- 端口冲突时先清理：
+建议：
+1. `pointerdown` 记录起点与地图 transform。
+2. `pointerup` 比较位移和 transform 变化。
+3. 多指触控与 `pointercancel` 必须清理状态。
+4. 非主指针（`isPrimary=false`）不要进入答题主流程。
+
+## 5.2 不依赖单一路径命中
+常见 bug：拖动后 `event.target` 失效导致“点了没反应”。
+
+建议：
+1. 先尝试 `event.target` 命中 feature。
+2. 回退到“屏幕坐标 -> 经纬度 -> geoContains(feature)”匹配。
+3. 两条路径都失败才判定为地图外点击。
+
+## 5.3 地图外点击策略
+建议统一为：
+- 不计错
+- 不跳题
+- 给提示（例如“请点击地图轮廓内区域”）
+
+## 6. 移动端专项调试
+Playwright 设备仿真：
 ```bash
-lsof -i :8080 -sTCP:LISTEN -n -P
-kill <PID>
+node - <<'NODE'
+const { chromium, devices } = require('playwright');
+(async()=>{
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ ...devices['iPad Pro 11'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8080', { waitUntil: 'networkidle' });
+  // 在这里模拟 tap/drag/pinch 场景
+  await browser.close();
+})();
+NODE
 ```
-- 保留调试产物到 `/tmp`：截图、日志、指标输出，便于对比前后版本。
-- 修改后先跑回归测试：
+
+移动端高频问题与处理：
+1. 悬停高亮残留：
+- 仅在 `@media (hover: hover) and (pointer: fine)` 下启用 `:hover`。
+
+2. 工具栏遮挡地图：
+- 默认折叠辅助操作，提供显隐开关。
+
+3. 误触拖动：
+- 触屏阈值大于鼠标阈值。
+
+## 7. 数据与地图正确性检查
+### 7.1 数据完整性
 ```bash
+node - <<'NODE'
+const fs = require('fs');
+const p = JSON.parse(fs.readFileSync('data/china-provinces.geojson','utf8'));
+console.log('province features:', p.features.length);
+NODE
+```
+
+### 7.2 特殊要素存在性
+地图项目建议显式校验关键要素是否存在：
+- 台湾
+- 九段线
+- 极小目标（如澳门）是否按玩法策略过滤
+
+## 8. 回归测试策略
+最低标准：
+1. 自动化：`npm test` 全绿。
+2. 手工脚本：
+- 至少验证一次“拖动后点击仍有效”。
+- 至少验证一次“地图外点击不计错”。
+- 至少验证一次“移动端按钮不遮挡关键区域”。
+3. 发布前：版本号与资源 query 参数同步递增。
+
+## 9. 缓存与发布排查
+当用户反馈“我这边没更新”时，优先检查：
+1. 页面显示版本号是否已变化。
+2. `index.html` 中 CSS/JS 的 `?v=` 是否同步更新。
+3. Pages/CDN 是否仍在旧缓存窗口。
+
+建议固定流程：
+1. 改代码。
+2. 改 `APP_VERSION`。
+3. 改 `index.html` 的资源版本参数。
+4. 回归测试。
+5. 提交推送。
+
+## 10. 可复用排障模板
+可按下面模板记录每个问题：
+
+```md
+问题：
+- 现象：
+- 设备/浏览器：
+- 复现步骤：
+
+定位：
+- 关键日志：
+- 根因：
+
+修复：
+- 修改文件：
+- 方案：
+
+验证：
+- 自动化：
+- 手工脚本：
+- 截图/日志路径：
+```
+
+## 11. 常用命令速查
+```bash
+# 测试
 npm test
-```
 
-## 7. 推荐工作流（无 GUI）
-1. 写最小复现脚本（进入页面 + 定位问题模式）。
-2. 量化问题（尺寸/数量/状态，不只“看起来”）。
-3. 改 CSS/投影/渲染逻辑。
-4. 同脚本复测 + `npm test`。
-5. 提交并推送。
+# 查看端口占用
+lsof -i :8080 -sTCP:LISTEN -n -P
+
+# 快速搜索代码
+rg "pointerup|geoContains|haversine" js/
+
+# 查看最近一次提交
+git log -1 --oneline
+```
