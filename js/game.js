@@ -2,12 +2,12 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.14";
+  const APP_VERSION = "v2026.02.20.15";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
-  const MAP_SCALE_STEPS = [1, 2, 3];
-  const MAP_SCALE_LABELS = ["标准", "+100%", "+200%"];
+  const MAP_SCALE_STEPS = [1, 2, 3, 5, 8, 12];
+  const MAP_SCALE_LABELS = ["标准", "+100%", "+200%", "+400%", "+700%", "+1100%"];
   const MAP_PAN_STEP_PX = 120;
   const CITY_CHALLENGE_EXCLUDED_PROVINCES = new Set([
     "北京市",
@@ -160,6 +160,7 @@
     touchGestureDetected: false,
     autoNextTimer: null,
     viewScaleIndex: 0,
+    recentQuestionKeysByMode: {},
     records: {},
     dev: {
       enabled: false,
@@ -908,7 +909,7 @@
             actualPosition: center,
           };
         });
-      return Utils.sampleSize(items, Math.min(size, items.length));
+      return sampleQuestionsWithRecency(mode, items, size);
     }
 
     if (mode === "city-click") {
@@ -916,20 +917,62 @@
       const capitalItems = buildChinaCapitalQuestions();
       const secondaryItems = cityLevel === "super" ? buildChinaSecondaryQuestions() : [];
       const items = [...capitalItems, ...secondaryItems];
-      return Utils.sampleSize(items, Math.min(size, items.length));
+      return sampleQuestionsWithRecency(mode, items, size);
     }
 
     if (mode === "world-province") {
       const items = buildWorldCountryQuestions();
-      return Utils.sampleSize(items, Math.min(size, items.length));
+      return sampleQuestionsWithRecency(mode, items, size);
     }
 
     if (mode === "world-city") {
       const items = buildWorldCityQuestions();
-      return Utils.sampleSize(items, Math.min(size, items.length));
+      return sampleQuestionsWithRecency(mode, items, size);
     }
 
     return [];
+  }
+
+  function getQuestionRecencyKey(mode, item) {
+    const entry = item || {};
+    const name = Utils.normalizeName(entry.name || "");
+    const prompt = Utils.normalizeName(entry.prompt || "");
+    const province = Utils.normalizeName(entry.province || "");
+    const country = Utils.normalizeName(entry.country || "");
+    return [mode, entry.type || "", name, prompt, province, country].join("|");
+  }
+
+  function sampleQuestionsWithRecency(mode, items, count) {
+    const list = Array.isArray(items) ? items : [];
+    const targetSize = Math.min(Number.isFinite(count) ? Number(count) : TOTAL_QUESTIONS, list.length);
+    if (!targetSize) {
+      return [];
+    }
+
+    const recent = Array.isArray(state.recentQuestionKeysByMode[mode])
+      ? state.recentQuestionKeysByMode[mode]
+      : [];
+    const recentSet = new Set(recent);
+
+    const fresh = list.filter((item) => !recentSet.has(getQuestionRecencyKey(mode, item)));
+    let picked = [];
+
+    if (fresh.length >= targetSize) {
+      picked = Utils.sampleSize(fresh, targetSize);
+    } else {
+      picked = Utils.sampleSize(fresh, fresh.length);
+      const need = targetSize - picked.length;
+      const rest = list.filter((item) => !picked.includes(item));
+      picked = picked.concat(Utils.sampleSize(rest, need));
+    }
+
+    picked = Utils.sampleSize(picked, picked.length);
+
+    const recentLimit = Math.max(targetSize * 6, 80);
+    const appended = picked.map((item) => getQuestionRecencyKey(mode, item));
+    state.recentQuestionKeysByMode[mode] = [...recent, ...appended].slice(-recentLimit);
+
+    return picked;
   }
 
   function getFeatureCenter(feature) {
@@ -943,11 +986,12 @@
 
   function getMapRenderPreset(scope, isReview) {
     const world = scope === "world";
+    const maxScale = isReview ? (world ? 10 : 8) : world ? 28 : 16;
     return {
       projection: world ? "naturalEarth1" : "equirectangular",
       mapThemeClass: world ? "map-theme-world" : "map-theme-china",
       padding: isReview ? (world ? 10 : 8) : world ? 12 : 10,
-      scaleExtent: isReview ? [1, 8] : [1, 12],
+      scaleExtent: [1, maxScale],
       fitBounds: world ? null : [[73.5, 18], [135.1, 53.6]],
     };
   }
