@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.16";
+  const APP_VERSION = "v2026.02.20.17";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -11,25 +11,66 @@
   const MAP_PAN_STEP_PX = 120;
   const WORLD_CITY_SCORE_WEIGHTS = {
     countryGDP: 0.5,
-    cityFame: 0.35,
-    cityType: 0.15,
+    cityFame: 0.42,
+    cityType: 0.08,
   };
   const WORLD_CITY_REGION_MINIMUMS = {
     top50: {
-      Africa: 4,
+      Africa: 3,
       Americas: 8,
-      Asia: 10,
-      Europe: 10,
+      Asia: 11,
+      Europe: 11,
       Oceania: 2,
     },
     top200: {
-      Africa: 16,
-      Americas: 26,
-      Asia: 36,
-      Europe: 36,
-      Oceania: 8,
+      Africa: 12,
+      Americas: 22,
+      Asia: 34,
+      Europe: 34,
+      Oceania: 5,
     },
   };
+  const WORLD_CITY_COUNTRY_BLOCKLIST = new Set([
+    "bouvetisland",
+    "frenchsouthernandantarcticlands",
+    "unitedstatesminoroutlyingislands",
+    "caribbeannetherlands",
+    "britishindianoceanterritory",
+    "cocoskeelingislands",
+    "christmasisland",
+    "pitcairnislands",
+    "tokelau",
+    "wallisandfutuna",
+    "southgeorgia",
+    "svalbardandjanmayen",
+    "saintpierreandmiquelon",
+    "frenchpolynesia",
+    "guadeloupe",
+    "martinique",
+    "reunion",
+    "mayotte",
+    "guam",
+    "northernmarianaislands",
+    "americansamoa",
+    "cookislands",
+    "niue",
+    "turksandcaicosislands",
+    "caymanislands",
+    "montserrat",
+    "anguilla",
+    "aruba",
+    "curacao",
+    "sintmaarten",
+    "faroeislands",
+    "gibraltar",
+    "isleofman",
+    "jersey",
+    "guernsey",
+    "alandislands",
+    "britishvirginislands",
+    "unitedstatesvirginislands",
+    "falklandislands",
+  ]);
   const CITY_FAME_SCORE_MAP = {
     newyork: 1.0,
     london: 1.0,
@@ -788,7 +829,7 @@
               ? metrics.scores.combined
               : 0.24
         );
-        const typeScore = city.type === "capital" ? 0.92 : 0.82;
+        const typeScore = city.type === "major" ? 0.92 : 0.72;
         const fameScore = getCityFameScore(city);
         const region = (metrics && metrics.region) || "Other";
         const score =
@@ -798,12 +839,37 @@
         return {
           city,
           region,
+          fameScore,
+          gdpScore,
+          gdpValue: Number(metrics && metrics.gdp && metrics.gdp.value) || 0,
+          areaValue: Number(metrics && metrics.area && metrics.area.value) || 0,
+          hasMetrics: !!metrics,
           score,
         };
       })
       .sort((a, b) => b.score - a.score);
 
-    const selected = selectWorldCitiesWithRegionBalance(scored, level, cap);
+    const strictCandidates = scored.filter((item) => isWorldCityCandidate(item, level, false));
+    let selected = selectWorldCitiesWithRegionBalance(strictCandidates, level, cap);
+
+    // If strict filtering is too tight, softly relax while still avoiding tiny/obscure cities.
+    if (selected.length < Math.min(cap, scored.length)) {
+      const target = Math.min(cap, scored.length);
+      const picked = new Set(
+        selected.map(
+          (city) => `${normalizeCityName(city.name)}|${normalizeCountryName(city.country)}`
+        )
+      );
+      const relaxed = scored.filter((item) => isWorldCityCandidate(item, level, true));
+      for (let i = 0; i < relaxed.length && selected.length < target; i += 1) {
+        const city = relaxed[i].city || {};
+        const key = `${normalizeCityName(city.name)}|${normalizeCountryName(city.country)}`;
+        if (!picked.has(key)) {
+          picked.add(key);
+          selected.push(city);
+        }
+      }
+    }
 
     return selected.map((city) => {
       const country = getBilingualCountryLabel(city.country || "");
@@ -822,6 +888,52 @@
         country: city.country,
       };
     });
+  }
+
+  function isWorldCityCandidate(item, level, relaxed) {
+    const entry = item || {};
+    const city = entry.city || {};
+    const fame = Number(entry.fameScore || 0);
+    const gdp = Number(entry.gdpValue || 0);
+    const area = Number(entry.areaValue || 0);
+    const hasMetrics = !!entry.hasMetrics;
+    const countryNorm = normalizeCountryName(city.country || "");
+    const type = String(city.type || "capital").toLowerCase();
+
+    if (WORLD_CITY_COUNTRY_BLOCKLIST.has(countryNorm)) {
+      return false;
+    }
+
+    // Very strict for Top50, softer for Top200.
+    if (level === "top50") {
+      if (!hasMetrics) {
+        return fame >= (relaxed ? 0.86 : 0.92);
+      }
+      if (!relaxed && type !== "major" && fame < 0.9) {
+        return false;
+      }
+      if (gdp < 5e10 && fame < (relaxed ? 0.9 : 0.94)) {
+        return false;
+      }
+      if (gdp < 1.2e11 && area < 2.2e4 && fame < (relaxed ? 0.86 : 0.9)) {
+        return false;
+      }
+      if (area < 1500 && fame < (relaxed ? 0.9 : 0.95)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (!hasMetrics) {
+      return fame >= (relaxed ? 0.74 : 0.82);
+    }
+    if (gdp < 2e10 && area < 1e4 && fame < (relaxed ? 0.75 : 0.82)) {
+      return false;
+    }
+    if (area < 800 && fame < (relaxed ? 0.8 : 0.88)) {
+      return false;
+    }
+    return true;
   }
 
   function getCityFameScore(city) {
