@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.13";
+  const APP_VERSION = "v2026.02.20.14";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -1083,26 +1083,41 @@
   }
 
   function onMapPointerDown(event) {
-    state.downPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
-    state.downTransform = captureMapTransform();
-
     if (event && event.pointerType === "touch" && Number.isFinite(event.pointerId)) {
+      if (event.isPrimary) {
+        resetTouchTracking();
+      }
       state.touchPointers.add(event.pointerId);
       if (state.touchPointers.size > 1) {
         state.touchGestureDetected = true;
       }
+      if (!event.isPrimary) {
+        return;
+      }
     }
+
+    state.downPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
+    state.downTransform = captureMapTransform();
   }
 
   function onMapPointerCancel(event) {
     if (event && event.pointerType === "touch" && Number.isFinite(event.pointerId)) {
-      state.touchPointers.delete(event.pointerId);
-      if (!state.touchPointers.size) {
-        state.touchGestureDetected = false;
+      if (event.isPrimary) {
+        resetTouchTracking();
+      } else {
+        state.touchPointers.delete(event.pointerId);
+        if (!state.touchPointers.size) {
+          state.touchGestureDetected = false;
+        }
       }
     }
     state.downPoint = null;
     state.downTransform = null;
+  }
+
+  function resetTouchTracking() {
+    state.touchPointers.clear();
+    state.touchGestureDetected = false;
   }
 
   function captureMapTransform() {
@@ -1132,6 +1147,15 @@
       return;
     }
     const pointerType = event && event.pointerType ? event.pointerType : "mouse";
+    if (pointerType === "touch" && event && event.isPrimary === false) {
+      if (Number.isFinite(event.pointerId)) {
+        state.touchPointers.delete(event.pointerId);
+      }
+      if (!state.touchPointers.size) {
+        state.touchGestureDetected = false;
+      }
+      return;
+    }
 
     const upPoint = Utils.getPointerPosition(event, state.mapContext.svg.node());
     const downPoint = state.downPoint || upPoint;
@@ -1181,7 +1205,13 @@
     );
 
     if (modeType === "province") {
-      const feature = getFeatureFromEvent(event);
+      const activeFeatures =
+        state.activeGeoJson && Array.isArray(state.activeGeoJson.features)
+          ? state.activeGeoJson.features
+          : [];
+      const feature =
+        getFeatureFromEvent(event) ||
+        (geo ? Utils.findFeatureByPoint(geo.lon, geo.lat, activeFeatures) : null);
       if (!feature) {
         setFeedback("请点击地图轮廓内区域。", "warn");
         addDevLog("province_click_invalid", { clickGeo: geo, clickScreen: upPoint });
@@ -1263,12 +1293,27 @@
       setFeedback("回答正确。", "ok");
       finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     } else if (clickedName) {
-      setFeedback(`未命中，点击了：${clickedName}。正确答案：${target.name}。`, "error");
+      const clickedDisplay = formatProvinceFeedbackName(clickedName);
+      const targetDisplay = formatProvinceFeedbackName(target.name);
+      setFeedback(`未命中，点击了：${clickedDisplay}。正确答案：${targetDisplay}。`, "error");
       finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     } else {
-      setFeedback(`未命中有效行政区。正确答案：${target.name}。`, "error");
+      const targetDisplay = formatProvinceFeedbackName(target.name);
+      setFeedback(`未命中有效行政区。正确答案：${targetDisplay}。`, "error");
       finalizeQuestion({ autoNextMs: AUTO_NEXT_DELAY_MS });
     }
+  }
+
+  function formatProvinceFeedbackName(name) {
+    const raw = String(name == null ? "" : name).trim();
+    if (!raw) {
+      return "";
+    }
+    if (state.mode === "world-province") {
+      const label = getBilingualCountryLabel(raw);
+      return `${label.zh} / ${label.en}`;
+    }
+    return raw;
   }
 
   function highlightProvinceResult(targetName, clickedName, correct) {
