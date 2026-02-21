@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.17";
+  const APP_VERSION = "v2026.02.20.18";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -725,6 +725,24 @@
     return CITY_CHALLENGE_EXCLUDED_PROVINCES.has(province);
   }
 
+  function getChinaCityFamiliarity(name, cityType) {
+    const key = normalizeCityName(name || "");
+    const fame =
+      key && Number.isFinite(CITY_FAME_SCORE_MAP[key]) ? Number(CITY_FAME_SCORE_MAP[key]) : null;
+
+    if (cityType === "secondary") {
+      if (fame != null) {
+        return clamp01(fame * 0.72);
+      }
+      return 0.34;
+    }
+
+    if (fame != null) {
+      return clamp01(0.42 + fame * 0.5);
+    }
+    return 0.68;
+  }
+
   function buildChinaCapitalQuestions() {
     return state.data.chinaCities
       .filter((c) => c.type === "capital")
@@ -740,6 +758,7 @@
           cityType: "capital",
           country: "China",
           province: provinceName,
+          familiarityScore: getChinaCityFamiliarity(city.name, "capital"),
         };
       });
   }
@@ -755,6 +774,7 @@
         cityType: "secondary",
         country: "China",
         province: city.province,
+        familiarityScore: getChinaCityFamiliarity(city.name, "secondary"),
       }));
   }
 
@@ -801,9 +821,9 @@
     }
 
     return used
-      .map((item) => item.feature)
-      .filter((feature) => feature && Utils.getFeatureName(feature))
-      .map((feature) => {
+      .filter((item) => item && item.feature && Utils.getFeatureName(item.feature))
+      .map((item) => {
+        const feature = item.feature;
         const center = getFeatureCenter(feature);
         const country = getBilingualCountryLabel(Utils.getFeatureName(feature));
         return {
@@ -811,6 +831,7 @@
           name: Utils.getFeatureName(feature),
           prompt: `${country.zh} / ${country.en}`,
           actualPosition: center,
+          familiarityScore: clamp01(item.gdpAreaScore),
         };
       });
   }
@@ -848,6 +869,14 @@
         };
       })
       .sort((a, b) => b.score - a.score);
+    const scoreByCityKey = new Map(
+      scored.map((item) => [
+        `${normalizeCityName(item.city && item.city.name)}|${normalizeCountryName(
+          item.city && item.city.country
+        )}`,
+        Number(item.score) || 0,
+      ])
+    );
 
     const strictCandidates = scored.filter((item) => isWorldCityCandidate(item, level, false));
     let selected = selectWorldCitiesWithRegionBalance(strictCandidates, level, cap);
@@ -886,6 +915,11 @@
         actualPosition: { lat: city.lat, lon: city.lon },
         cityType: city.type,
         country: city.country,
+        familiarityScore: clamp01(
+          scoreByCityKey.get(
+            `${normalizeCityName(city.name)}|${normalizeCountryName(city.country)}`
+          ) || 0
+        ),
       };
     });
   }
@@ -1237,6 +1271,14 @@
     return Number.isFinite(Number(value));
   }
 
+  function clamp01(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, n));
+  }
+
   function setModeButtonsDisabled(flag) {
     els.modeButtons.forEach((btn) => {
       btn.disabled = !!flag;
@@ -1337,17 +1379,17 @@
       const capitalItems = buildChinaCapitalQuestions();
       const secondaryItems = cityLevel === "super" ? buildChinaSecondaryQuestions() : [];
       const items = [...capitalItems, ...secondaryItems];
-      return sampleQuestionsWithRecency(mode, items, size);
+      return sampleQuestionsProgressiveWithRecency(mode, items, size);
     }
 
     if (mode === "world-province") {
       const items = buildWorldCountryQuestions();
-      return sampleQuestionsWithRecency(mode, items, size);
+      return sampleQuestionsProgressiveWithRecency(mode, items, size);
     }
 
     if (mode === "world-city") {
       const items = buildWorldCityQuestions();
-      return sampleQuestionsWithRecency(mode, items, size);
+      return sampleQuestionsProgressiveWithRecency(mode, items, size);
     }
 
     return [];
@@ -1369,12 +1411,7 @@
       return [];
     }
 
-    const recent = Array.isArray(state.recentQuestionKeysByMode[mode])
-      ? state.recentQuestionKeysByMode[mode]
-      : [];
-    const recentSet = new Set(recent);
-
-    const fresh = list.filter((item) => !recentSet.has(getQuestionRecencyKey(mode, item)));
+    const { recent, fresh, stale } = splitRecencyPool(mode, list);
     let picked = [];
 
     if (fresh.length >= targetSize) {
@@ -1382,17 +1419,82 @@
     } else {
       picked = Utils.sampleSize(fresh, fresh.length);
       const need = targetSize - picked.length;
-      const rest = list.filter((item) => !picked.includes(item));
-      picked = picked.concat(Utils.sampleSize(rest, need));
+      picked = picked.concat(Utils.sampleSize(stale, need));
     }
 
     picked = Utils.sampleSize(picked, picked.length);
 
+    rememberRecentQuestions(mode, recent, picked, targetSize);
+    return picked;
+  }
+
+  function sampleQuestionsProgressiveWithRecency(mode, items, count) {
+    const list = Array.isArray(items) ? items : [];
+    const targetSize = Math.min(Number.isFinite(count) ? Number(count) : TOTAL_QUESTIONS, list.length);
+    if (!targetSize) {
+      return [];
+    }
+
+    const { recent, fresh, stale } = splitRecencyPool(mode, list);
+    const pool = [...Utils.sampleSize(fresh, fresh.length), ...Utils.sampleSize(stale, stale.length)];
+
+    const scored = pool
+      .map((item) => ({
+        item,
+        familiarity: clamp01(getQuestionFamiliarity(mode, item)),
+      }))
+      .sort((a, b) => b.familiarity - a.familiarity);
+
+    const remaining = [...scored];
+    const picked = [];
+
+    for (let i = 0; i < targetSize && remaining.length; i += 1) {
+      const ratio = targetSize <= 1 ? 0 : i / (targetSize - 1);
+      const targetIndex = Math.round(ratio * (remaining.length - 1));
+      const jitter = Math.max(1, Math.floor(remaining.length * 0.12));
+      const minIndex = Math.max(0, targetIndex - jitter);
+      const maxIndex = Math.min(remaining.length - 1, targetIndex + jitter);
+      const pickIndex =
+        minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
+      const pickedItem = remaining.splice(pickIndex, 1)[0];
+      picked.push(pickedItem.item);
+    }
+
+    rememberRecentQuestions(mode, recent, picked, targetSize);
+    return picked;
+  }
+
+  function splitRecencyPool(mode, list) {
+    const recent = Array.isArray(state.recentQuestionKeysByMode[mode])
+      ? state.recentQuestionKeysByMode[mode]
+      : [];
+    const recentSet = new Set(recent);
+    const fresh = list.filter((item) => !recentSet.has(getQuestionRecencyKey(mode, item)));
+    const stale = list.filter((item) => recentSet.has(getQuestionRecencyKey(mode, item)));
+    return { recent, fresh, stale };
+  }
+
+  function rememberRecentQuestions(mode, recent, picked, targetSize) {
     const recentLimit = Math.max(targetSize * 6, 80);
     const appended = picked.map((item) => getQuestionRecencyKey(mode, item));
     state.recentQuestionKeysByMode[mode] = [...recent, ...appended].slice(-recentLimit);
+  }
 
-    return picked;
+  function getQuestionFamiliarity(mode, item) {
+    const entry = item || {};
+    if (Number.isFinite(Number(entry.familiarityScore))) {
+      return Number(entry.familiarityScore);
+    }
+
+    if (mode === "city-click") {
+      return getChinaCityFamiliarity(entry.name || entry.prompt || "", entry.cityType || "capital");
+    }
+
+    if (mode === "world-city") {
+      return getCityFameScore(entry);
+    }
+
+    return 0.5;
   }
 
   function getFeatureCenter(feature) {
