@@ -2,13 +2,112 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.15";
+  const APP_VERSION = "v2026.02.20.16";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
   const MAP_SCALE_STEPS = [1, 2, 3, 5, 8, 12];
   const MAP_SCALE_LABELS = ["标准", "+100%", "+200%", "+400%", "+700%", "+1100%"];
   const MAP_PAN_STEP_PX = 120;
+  const WORLD_CITY_SCORE_WEIGHTS = {
+    countryGDP: 0.5,
+    cityFame: 0.35,
+    cityType: 0.15,
+  };
+  const WORLD_CITY_REGION_MINIMUMS = {
+    top50: {
+      Africa: 4,
+      Americas: 8,
+      Asia: 10,
+      Europe: 10,
+      Oceania: 2,
+    },
+    top200: {
+      Africa: 16,
+      Americas: 26,
+      Asia: 36,
+      Europe: 36,
+      Oceania: 8,
+    },
+  };
+  const CITY_FAME_SCORE_MAP = {
+    newyork: 1.0,
+    london: 1.0,
+    paris: 0.99,
+    tokyo: 0.99,
+    beijing: 0.98,
+    shanghai: 0.98,
+    hongkong: 0.98,
+    singapore: 0.98,
+    dubai: 0.97,
+    losangeles: 0.97,
+    sanfrancisco: 0.96,
+    chicago: 0.95,
+    toronto: 0.94,
+    vancouver: 0.92,
+    montreal: 0.91,
+    mexicocity: 0.95,
+    saopaulo: 0.95,
+    riodejaneiro: 0.93,
+    buenosaires: 0.93,
+    delhi: 0.95,
+    mumbai: 0.95,
+    bangkok: 0.94,
+    seoul: 0.96,
+    madrid: 0.94,
+    barcelona: 0.94,
+    berlin: 0.94,
+    rome: 0.93,
+    milan: 0.91,
+    amsterdam: 0.92,
+    brussels: 0.89,
+    vienna: 0.9,
+    prague: 0.88,
+    warsaw: 0.87,
+    budapest: 0.86,
+    athens: 0.86,
+    zurich: 0.89,
+    geneva: 0.88,
+    stockholm: 0.88,
+    oslo: 0.86,
+    copenhagen: 0.87,
+    helsinki: 0.84,
+    dublin: 0.85,
+    lisbon: 0.86,
+    moscow: 0.94,
+    istanbul: 0.94,
+    cairo: 0.93,
+    johannesburg: 0.91,
+    lagos: 0.9,
+    nairobi: 0.87,
+    casablanca: 0.85,
+    addisababa: 0.83,
+    sydney: 0.94,
+    melbourne: 0.91,
+    auckland: 0.86,
+    wellington: 0.8,
+    tehran: 0.89,
+    riyadh: 0.89,
+    jeddah: 0.82,
+    doha: 0.83,
+    abudhabi: 0.88,
+    karachi: 0.88,
+    jakarta: 0.92,
+    manila: 0.89,
+    hochiminhcity: 0.86,
+    hanoi: 0.84,
+    osaka: 0.9,
+    kyoto: 0.8,
+    wuhan: 0.84,
+    guangzhou: 0.9,
+    shenzhen: 0.9,
+    chongqing: 0.84,
+    tianjin: 0.82,
+    chengdu: 0.85,
+    xian: 0.82,
+    hangzhou: 0.84,
+    nanjing: 0.82,
+  };
   const CITY_CHALLENGE_EXCLUDED_PROVINCES = new Set([
     "北京市",
     "天津市",
@@ -78,22 +177,27 @@
   };
   const COUNTRY_NAME_ALIASES = {
     unitedstatesofamerica: "unitedstates",
+    unitedstates: "unitedstatesofamerica",
+    uae: "unitedarabemirates",
     russia: "russianfederation",
     syria: "syrianarabrepublic",
     vietnam: "vietnam",
     laos: "laopeoplesdemocraticrepublic",
-    bolivia: "bolivia(plurinationalstateof)",
-    moldova: "moldova,republicof",
-    iran: "iran(islamicrepublicof)",
-    venezuela: "venezuela(bolivarianrepublicof)",
-    tanzania: "tanzania,unitedrepublicof",
-    "korea,dem.rep": "korea,democraticpeoplesrepublicof",
-    northkorea: "korea,democraticpeoplesrepublicof",
-    southkorea: "korea,republicof",
-    republicofkorea: "korea,republicof",
+    bolivia: "boliviaplurinationalstateof",
+    moldova: "moldovarepublicof",
+    iran: "iranislamicrepublicof",
+    venezuela: "venezuelabolivarianrepublicof",
+    tanzania: "tanzaniaunitedrepublicof",
+    koreademrep: "koreademocraticpeoplesrepublicof",
+    northkorea: "koreademocraticpeoplesrepublicof",
+    southkorea: "korearepublicof",
+    republicofkorea: "korearepublicof",
     czechia: "czechrepublic",
-    "drcongo": "congo,thedemocraticrepublicofthe",
-    democraticrepublicofthecongo: "congo,thedemocraticrepublicofthe",
+    drcongo: "congothedemocraticrepublicofthe",
+    democraticrepublicofthecongo: "congothedemocraticrepublicofthe",
+    palestine: "stateofpalestine",
+    thebahamas: "bahamas",
+    macedonia: "northmacedonia",
   };
   const STORAGE_KEYS = {
     records: "map-game-records",
@@ -149,6 +253,9 @@
       worldCountries: null,
       worldCities: [],
       countryLabels: new Map(),
+      countryMetricsByName: new Map(),
+      countryIso3Metrics: new Map(),
+      countryNameToIso3: new Map(),
     },
 
     mapContext: null,
@@ -520,13 +627,21 @@
     clearError();
 
     try {
-      const [chinaProvinces, chinaCities, worldCountries, worldCities, worldCountryMeta] =
+      const [
+        chinaProvinces,
+        chinaCities,
+        worldCountries,
+        worldCities,
+        worldCountryMeta,
+        worldCountryMetrics,
+      ] =
         await Promise.all([
           d3.json("data/china-provinces.geojson"),
           d3.json("data/china-cities.json"),
           d3.json("data/world-countries.geojson"),
           d3.json("data/world-cities.json"),
           d3.json("data/world-countries-full.json"),
+          d3.json("data/world-country-metrics.json"),
         ]);
 
       state.data.chinaProvinces = normalizeGeoJsonOrientation(chinaProvinces);
@@ -536,6 +651,7 @@
       state.data.chinaCities = sanitizeChinaCities(chinaCities || []);
       state.data.worldCities = sanitizeWorldCities(worldCities || []);
       state.data.countryLabels = buildCountryLabels(worldCountryMeta || []);
+      applyCountryMetrics(worldCountryMetrics || {});
       state.dataReady = true;
 
       showLoading(false);
@@ -606,10 +722,45 @@
       ? [...state.data.worldCountries.features]
       : [];
     const level = state.settings.worldCountryDifficulty || "all";
-    const sortedByArea = features.sort((a, b) => d3.geoArea(b) - d3.geoArea(a));
-    const used = level === "top50" ? sortedByArea.slice(0, 50) : sortedByArea;
+    const areaSorted = [...features].sort((a, b) => d3.geoArea(b) - d3.geoArea(a));
+    const areaScoreMap = new Map();
+    const denom = Math.max(1, areaSorted.length - 1);
+    areaSorted.forEach((feature, idx) => {
+      areaScoreMap.set(
+        normalizeCountryName(Utils.getFeatureName(feature)),
+        (areaSorted.length - 1 - idx) / denom
+      );
+    });
+
+    const scored = features
+      .filter((feature) => feature && Utils.getFeatureName(feature))
+      .map((feature) => {
+        const name = Utils.getFeatureName(feature);
+        const metrics = getCountryMetrics(name);
+        const hasGDP = Number.isFinite(Number(metrics && metrics.gdp && metrics.gdp.value));
+        const gdpAreaScore = Number(
+          metrics && metrics.scores && Number.isFinite(Number(metrics.scores.combined))
+            ? metrics.scores.combined
+            : areaScoreMap.get(normalizeCountryName(name)) || 0
+        );
+        return { feature, gdpAreaScore, hasGDP };
+      })
+      .sort((a, b) => b.gdpAreaScore - a.gdpAreaScore);
+
+    let used = scored;
+    if (level === "top50") {
+      const withGDP = scored.filter((item) => item.hasGDP);
+      const base = withGDP.slice(0, 50);
+      if (base.length < 50) {
+        const rest = scored.filter((item) => !base.includes(item));
+        used = base.concat(rest.slice(0, 50 - base.length));
+      } else {
+        used = base;
+      }
+    }
 
     return used
+      .map((item) => item.feature)
       .filter((feature) => feature && Utils.getFeatureName(feature))
       .map((feature) => {
         const center = getFeatureCenter(feature);
@@ -627,15 +778,34 @@
     const all = Array.isArray(state.data.worldCities) ? [...state.data.worldCities] : [];
     const level = state.settings.worldCityDifficulty || "top200";
     const cap = level === "top50" ? 50 : 200;
-    const prioritized = all
-      .sort((a, b) => {
-        const aScore = a.type === "capital" ? 2 : 1;
-        const bScore = b.type === "capital" ? 2 : 1;
-        return bScore - aScore;
+    const scored = all
+      .map((city) => {
+        const metrics = getCountryMetrics(city.country || "");
+        const gdpScore = Number(
+          metrics && metrics.scores && Number.isFinite(Number(metrics.scores.gdp))
+            ? metrics.scores.gdp
+            : metrics && metrics.scores && Number.isFinite(Number(metrics.scores.combined))
+              ? metrics.scores.combined
+              : 0.24
+        );
+        const typeScore = city.type === "capital" ? 0.92 : 0.82;
+        const fameScore = getCityFameScore(city);
+        const region = (metrics && metrics.region) || "Other";
+        const score =
+          WORLD_CITY_SCORE_WEIGHTS.countryGDP * gdpScore +
+          WORLD_CITY_SCORE_WEIGHTS.cityFame * fameScore +
+          WORLD_CITY_SCORE_WEIGHTS.cityType * typeScore;
+        return {
+          city,
+          region,
+          score,
+        };
       })
-      .slice(0, Math.min(cap, all.length));
+      .sort((a, b) => b.score - a.score);
 
-    return prioritized.map((city) => {
+    const selected = selectWorldCitiesWithRegionBalance(scored, level, cap);
+
+    return selected.map((city) => {
       const country = getBilingualCountryLabel(city.country || "");
       const cityDisplay =
         city.enName && city.enName !== city.name ? `${city.name} / ${city.enName}` : city.name;
@@ -652,6 +822,63 @@
         country: city.country,
       };
     });
+  }
+
+  function getCityFameScore(city) {
+    const key = normalizeCityName(city && (city.enName || city.name || ""));
+    if (key && Number.isFinite(CITY_FAME_SCORE_MAP[key])) {
+      return Number(CITY_FAME_SCORE_MAP[key]);
+    }
+    return city && city.type === "major" ? 0.78 : 0.62;
+  }
+
+  function selectWorldCitiesWithRegionBalance(scoredCities, level, cap) {
+    const rows = Array.isArray(scoredCities) ? scoredCities : [];
+    const target = Math.min(cap, rows.length);
+    const quotas = WORLD_CITY_REGION_MINIMUMS[level] || WORLD_CITY_REGION_MINIMUMS.top200;
+
+    const groups = new Map();
+    rows.forEach((item) => {
+      const region = String(item.region || "Other");
+      if (!groups.has(region)) {
+        groups.set(region, []);
+      }
+      groups.get(region).push(item);
+    });
+    groups.forEach((list) => list.sort((a, b) => b.score - a.score));
+
+    const selected = [];
+    const pickedKeys = new Set();
+
+    const pick = (item) => {
+      const city = item.city || {};
+      const key = `${normalizeCityName(city.name)}|${normalizeCountryName(city.country)}`;
+      if (!key || pickedKeys.has(key)) {
+        return;
+      }
+      pickedKeys.add(key);
+      selected.push(city);
+    };
+
+    Object.keys(quotas).forEach((region) => {
+      const list = groups.get(region) || [];
+      const need = Math.min(Number(quotas[region]) || 0, list.length);
+      for (let i = 0; i < need; i += 1) {
+        pick(list[i]);
+      }
+    });
+
+    const fallback = rows.filter((item) => {
+      const city = item.city || {};
+      const key = `${normalizeCityName(city.name)}|${normalizeCountryName(city.country)}`;
+      return !pickedKeys.has(key);
+    });
+
+    for (let i = 0; i < fallback.length && selected.length < target; i += 1) {
+      pick(fallback[i]);
+    }
+
+    return selected.slice(0, target);
   }
 
   function sanitizeWorldCountries(geojson) {
@@ -709,7 +936,88 @@
     return String(value == null ? "" : value)
       .trim()
       .toLowerCase()
-      .replace(/\s+/g, "");
+      .replace(/\s+/g, "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function normalizeCityName(value) {
+    return String(value == null ? "" : value)
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function applyCountryMetrics(raw) {
+    const byName = new Map();
+    const byIso3 = new Map();
+    const nameToIso3 = new Map();
+
+    const countries = Array.isArray(raw.countries) ? raw.countries : [];
+    countries.forEach((item) => {
+      const name = item && item.name ? String(item.name) : "";
+      const key = normalizeCountryName(name);
+      if (key) {
+        byName.set(key, item);
+      }
+    });
+
+    const isoMetrics = raw.iso3Metrics && typeof raw.iso3Metrics === "object" ? raw.iso3Metrics : {};
+    Object.keys(isoMetrics).forEach((iso3) => {
+      const key = String(iso3 || "").toUpperCase();
+      if (key) {
+        byIso3.set(key, isoMetrics[iso3]);
+      }
+    });
+
+    const aliasObj =
+      raw.nameToIso3 && typeof raw.nameToIso3 === "object" ? raw.nameToIso3 : {};
+    Object.keys(aliasObj).forEach((nameKey) => {
+      const key = normalizeCountryName(nameKey);
+      const iso3 = String(aliasObj[nameKey] || "").toUpperCase();
+      if (key && iso3) {
+        nameToIso3.set(key, iso3);
+      }
+    });
+
+    state.data.countryMetricsByName = byName;
+    state.data.countryIso3Metrics = byIso3;
+    state.data.countryNameToIso3 = nameToIso3;
+  }
+
+  function getCountryMetrics(name) {
+    const key = normalizeCountryName(name);
+    if (!key) {
+      return null;
+    }
+
+    const candidates = new Set([key]);
+    if (COUNTRY_NAME_ALIASES[key]) {
+      candidates.add(COUNTRY_NAME_ALIASES[key]);
+    }
+    Object.keys(COUNTRY_NAME_ALIASES).forEach((from) => {
+      if (COUNTRY_NAME_ALIASES[from] === key) {
+        candidates.add(from);
+      }
+    });
+
+    for (const candidate of candidates) {
+      if (state.data.countryMetricsByName.has(candidate)) {
+        return state.data.countryMetricsByName.get(candidate);
+      }
+    }
+
+    for (const candidate of candidates) {
+      const iso3 = state.data.countryNameToIso3.get(candidate);
+      if (iso3 && state.data.countryIso3Metrics.has(iso3)) {
+        return state.data.countryIso3Metrics.get(iso3);
+      }
+    }
+
+    return null;
   }
 
   function getBilingualCountryLabel(name) {
