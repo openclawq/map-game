@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.18";
+  const APP_VERSION = "v2026.02.20.19";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -677,12 +677,12 @@
         worldCountryMetrics,
       ] =
         await Promise.all([
-          d3.json("data/china-provinces.geojson"),
-          d3.json("data/china-cities.json"),
-          d3.json("data/world-countries.geojson"),
-          d3.json("data/world-cities.json"),
-          d3.json("data/world-countries-full.json"),
-          d3.json("data/world-country-metrics.json"),
+          d3.json(`data/china-provinces.geojson?v=${encodeURIComponent(APP_VERSION)}`),
+          d3.json(`data/china-cities.json?v=${encodeURIComponent(APP_VERSION)}`),
+          d3.json(`data/world-countries.geojson?v=${encodeURIComponent(APP_VERSION)}`),
+          d3.json(`data/world-cities.json?v=${encodeURIComponent(APP_VERSION)}`),
+          d3.json(`data/world-countries-full.json?v=${encodeURIComponent(APP_VERSION)}`),
+          d3.json(`data/world-country-metrics.json?v=${encodeURIComponent(APP_VERSION)}`),
         ]);
 
       state.data.chinaProvinces = normalizeGeoJsonOrientation(chinaProvinces);
