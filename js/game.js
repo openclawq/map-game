@@ -2,7 +2,7 @@
   "use strict";
 
   const Utils = window.MapGameUtils;
-  const APP_VERSION = "v2026.02.20.19";
+  const APP_VERSION = "v2026.02.20.20";
   const TOTAL_QUESTIONS = 10;
   const AUTO_NEXT_DELAY_MS = 2000;
   const WORLD_COUNTRY_MIN_AREA = 0.0004;
@@ -297,6 +297,7 @@
       countryMetricsByName: new Map(),
       countryIso3Metrics: new Map(),
       countryNameToIso3: new Map(),
+      worldCityValidation: null,
     },
 
     mapContext: null,
@@ -693,6 +694,12 @@
       state.data.worldCities = sanitizeWorldCities(worldCities || []);
       state.data.countryLabels = buildCountryLabels(worldCountryMeta || []);
       applyCountryMetrics(worldCountryMetrics || {});
+      state.data.worldCityValidation = validateWorldCityCoordinates(
+        state.data.worldCities,
+        state.data.worldCountries,
+        worldCountryMeta || []
+      );
+      reportWorldCityValidation(state.data.worldCityValidation);
       state.dataReady = true;
 
       showLoading(false);
@@ -1164,6 +1171,174 @@
     }
 
     return null;
+  }
+
+  function getCountryAliasCandidates(name) {
+    const key = normalizeCountryName(name);
+    if (!key) {
+      return [];
+    }
+    const out = new Set([key]);
+    if (COUNTRY_NAME_ALIASES[key]) {
+      out.add(COUNTRY_NAME_ALIASES[key]);
+    }
+    Object.keys(COUNTRY_NAME_ALIASES).forEach((from) => {
+      if (COUNTRY_NAME_ALIASES[from] === key) {
+        out.add(from);
+      }
+    });
+    return [...out];
+  }
+
+  function resolveWorldCountryFeature(countryName, worldGeoJson) {
+    const features =
+      worldGeoJson && Array.isArray(worldGeoJson.features) ? worldGeoJson.features : [];
+    if (!features.length) {
+      return null;
+    }
+
+    const candidates = new Set(getCountryAliasCandidates(countryName));
+    for (let i = 0; i < features.length; i += 1) {
+      const feature = features[i];
+      const name = normalizeCountryName(Utils.getFeatureName(feature));
+      if (candidates.has(name)) {
+        return feature;
+      }
+    }
+    return null;
+  }
+
+  function buildCountryCenterMap(list) {
+    const map = new Map();
+    const entries = Array.isArray(list) ? list : [];
+    entries.forEach((item) => {
+      const name = item && item.name ? item.name : {};
+      const common = String(name.common || "").trim();
+      const official = String(name.official || "").trim();
+      const latlng = item && Array.isArray(item.latlng) ? item.latlng : [];
+      if (!common || latlng.length < 2) {
+        return;
+      }
+
+      const lat = Number(latlng[0]);
+      const lon = Number(latlng[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return;
+      }
+      const center = { lat, lon };
+
+      const commonKey = normalizeCountryName(common);
+      if (commonKey) {
+        map.set(commonKey, center);
+      }
+      const officialKey = normalizeCountryName(official);
+      if (officialKey) {
+        map.set(officialKey, center);
+      }
+    });
+    return map;
+  }
+
+  function getCountryCenter(countryName, centerMap) {
+    const map = centerMap instanceof Map ? centerMap : new Map();
+    const candidates = getCountryAliasCandidates(countryName);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const center = map.get(candidates[i]);
+      if (center) {
+        return center;
+      }
+    }
+    return null;
+  }
+
+  function validateWorldCityCoordinates(worldCities, worldGeoJson, worldCountryMeta) {
+    const cities = Array.isArray(worldCities) ? worldCities : [];
+    const centerMap = buildCountryCenterMap(worldCountryMeta);
+    const critical = [];
+    const warnings = [];
+    let checkedCapitals = 0;
+
+    cities.forEach((city) => {
+      if (!city || String(city.type || "").toLowerCase() !== "capital") {
+        return;
+      }
+      checkedCapitals += 1;
+
+      const feature = resolveWorldCountryFeature(city.country, worldGeoJson);
+      if (!feature) {
+        warnings.push({
+          reason: "country_feature_missing",
+          city: city.name,
+          country: city.country,
+        });
+        return;
+      }
+
+      let inside = true;
+      try {
+        inside = d3.geoContains(feature, [Number(city.lon), Number(city.lat)]);
+      } catch (err) {
+        inside = false;
+      }
+      if (!inside) {
+        critical.push({
+          reason: "capital_outside_country",
+          city: city.name,
+          country: city.country,
+          lat: city.lat,
+          lon: city.lon,
+        });
+      }
+
+      const center = getCountryCenter(city.country, centerMap);
+      const metrics = getCountryMetrics(city.country);
+      const area = Number(metrics && metrics.area && metrics.area.value) || 0;
+      if (center && area > 500000) {
+        const distToCenter = Utils.haversineDistance(
+          { lat: Number(city.lat), lon: Number(city.lon) },
+          center
+        );
+        // Large-country capital exactly at country-center is suspicious in this dataset.
+        if (Number.isFinite(distToCenter) && distToCenter < 25) {
+          warnings.push({
+            reason: "capital_near_country_center_large_country",
+            city: city.name,
+            country: city.country,
+            distanceKm: Number(distToCenter.toFixed(2)),
+            lat: city.lat,
+            lon: city.lon,
+          });
+        }
+      }
+    });
+
+    return {
+      checkedCapitals,
+      critical,
+      warnings,
+    };
+  }
+
+  function reportWorldCityValidation(report) {
+    if (!report) {
+      return;
+    }
+    const criticalCount = Array.isArray(report.critical) ? report.critical.length : 0;
+    const warningCount = Array.isArray(report.warnings) ? report.warnings.length : 0;
+    if (!criticalCount && !warningCount) {
+      return;
+    }
+
+    const summary = {
+      checkedCapitals: report.checkedCapitals || 0,
+      criticalCount,
+      warningCount,
+      critical: (report.critical || []).slice(0, 10),
+      warnings: (report.warnings || []).slice(0, 10),
+    };
+
+    console.warn("[data-quality] world city validation issues:", summary);
+    addDevLog("world_city_validation", summary);
   }
 
   function getBilingualCountryLabel(name) {
